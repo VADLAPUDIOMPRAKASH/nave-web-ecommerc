@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Search, Leaf, Truck, Clock, ShoppingBag } from 'lucide-react';
 import myContext from '../../context/data/myContext';
 import './HeroSection.css';
+import logo from '../../assets/NavedhanaLogo.png';
 
 function HeroSection() {
   const context = useContext(myContext);
@@ -120,7 +121,7 @@ function HeroSection() {
 
               <div className="absolute inset-0 rounded-full bg-green-100 dark:bg-green-900/30 scale-95"></div>
               <img
-                src="/src/assets/NavedhanaLogo.png"
+                src={logo}
                 alt="Fresh Vegetables"
                 className="absolute inset-0 w-[75%] h-[75%] m-auto object-contain mix-blend-multiply dark:mix-blend-normal"
               />
