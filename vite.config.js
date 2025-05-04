@@ -5,11 +5,19 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    exclude: ['firebase', 'firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage']
+    include: ['@react-aria/utils'],
+    exclude: [
+      'firebase',
+      'firebase/app',
+      'firebase/auth',
+      'firebase/firestore',
+      'firebase/storage',
+    ],
   },
   build: {
     commonjsOptions: {
-      include: [/firebase/]
+      transformMixedEsModules: true,
+      include: [/node_modules/, /firebase/, /@react-aria\/utils/],
     }
   }
 })
