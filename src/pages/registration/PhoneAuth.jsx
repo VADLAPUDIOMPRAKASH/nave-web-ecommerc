@@ -124,9 +124,6 @@ function PhoneAuth() {
             const userRef = collection(fireDB, "users");
             await addDoc(userRef, user);
             
-            // Save user data to localStorage
-            localStorage.setItem('user', JSON.stringify(result));
-            
             toast.success('Login Successful!');
             window.location.href = '/';
         } catch (error) {
@@ -145,9 +142,9 @@ function PhoneAuth() {
     }
 
     return (
-        <div className='flex justify-center items-center h-screen'>
+        <div className='flex justify-center items-center h-screen bg-gray-100 px-2'>
             {loading && <Loader />}
-            <div className='bg-gray-800 px-10 py-10 rounded-xl'>
+            <div className='bg-gray-800 w-full max-w-xs sm:max-w-sm px-4 sm:px-8 py-8 rounded-xl'>
                 <div className="">
                     <h1 className='text-center text-white text-xl mb-4 font-bold'>
                         {showOTP ? 'Verify OTP' : 'Phone Login'}
@@ -160,7 +157,7 @@ function PhoneAuth() {
                             <input type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
-                                className='bg-gray-600 mb-4 px-2 py-2 w-full lg:w-[20em] rounded-lg text-white placeholder:text-gray-200 outline-none'
+                                className='bg-gray-600 mb-4 px-3 py-2 w-full rounded-lg text-white placeholder:text-gray-200 outline-none'
                                 placeholder='Name (Optional)'
                             />
                         </div>
@@ -168,7 +165,7 @@ function PhoneAuth() {
                             <input type="tel"
                                 value={phone}
                                 onChange={(e) => setPhone(e.target.value.slice(0, 10))}
-                                className='bg-gray-600 mb-4 px-2 py-2 w-full lg:w-[20em] rounded-lg text-white placeholder:text-gray-200 outline-none'
+                                className='bg-gray-600 mb-4 px-3 py-2 w-full rounded-lg text-white placeholder:text-gray-200 outline-none'
                                 placeholder='Phone Number (10 digits)'
                                 maxLength="10"
                                 pattern="[0-9]*"
@@ -177,7 +174,7 @@ function PhoneAuth() {
                         <div className='flex justify-center mb-3'>
                             <button
                                 onClick={requestOTP}
-                                className='bg-yellow-500 w-full text-black font-bold px-2 py-2 rounded-lg'>
+                                className='bg-yellow-500 w-full text-black font-bold px-3 py-2 rounded-lg truncate'>
                                 Send OTP
                             </button>
                         </div>

@@ -3,51 +3,23 @@ import MyContext from './myContext';
 import { fireDB as fireDb } from '../../firebase/FirebaseConfig';
 import { Timestamp, addDoc, collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { toast } from 'react-toastify';
-import { doc, deleteDoc, setDoc, getDocs } from "firebase/firestore";
+import { doc, deleteDoc, setDoc, getDocs, updateDoc, getDoc } from "firebase/firestore";
 
 
 
 function MyState(props) {
-  const [mode, setMode] = useState('light');  
   const [loading, setLoading] = useState(false); 
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
 
-  const toggleMode = () => {
-    if (mode === 'light') {
-      setMode('dark');
-      document.body.style.backgroundColor = 'rgb(17, 24, 39)';
-    }
-    else {
-      setMode('light');
-      document.body.style.backgroundColor = 'white';
-    }
-  }
-
-  const [products, setProducts] = useState({
-    title: null,
-    price: null,
-    actualprice: null,
-    imageUrl: null,
-    category: null,
-    description: null,
-    time: Timestamp.now(),
-    date: new Date().toLocaleString(
-      "en-US",
-      {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      }
-    )
-
-  })
+  const [product, setProduct] = useState([]);
 
   // ********************** Add Product Section  **********************
-  const addProduct = async () => {
+  const addProduct = async (newProduct) => {
     const requiredFields = ['title', 'price', 'actualprice', 'imageUrl', 'category', 'description'];
     
     // Validate that all required fields are filled
     for (const field of requiredFields) {
-        if (!products[field]) {
+        if (!newProduct[field]) {
             return toast.error(`Please fill all fields`);
         }
     }
@@ -57,7 +29,7 @@ function MyState(props) {
     
     try {
         await addDoc(productRef, {
-            ...products,
+            ...newProduct,
             time: Timestamp.now(),
             date: new Date().toLocaleString("en-US", {
                 month: "short",
@@ -67,13 +39,8 @@ function MyState(props) {
         });
         toast.success("Product added successfully");
         
-        // Delay to show the toast before navigating
-        setTimeout(() => {
-            window.location.href = '/dashboard';
-        }, 800);
-        
-        getProductData(); // Call this to refresh product data
-        closeModal(); // Close the modal after adding the product
+        // Refresh product data immediately
+        getProductData();
 
     } catch (error) {
         console.log(error);
@@ -81,20 +48,7 @@ function MyState(props) {
     } finally {
         setLoading(false);
     }
-    
-    // Reset products state to an empty object
-    setProducts({
-        title: '',
-        price: '',
-        actualprice: '',
-        imageUrl: '',
-        category: '',
-        description: ''
-    });
 };
-
-
-  const [product, setProduct] = useState([]);
 
   // ****** get product
   const getProductData = async () => {
@@ -121,25 +75,42 @@ function MyState(props) {
   }
   //update and delete
   const edithandle = (item) => {
-    setProducts(item)
+    // This function is used for editing products
+    // The item will be passed to the update form
+    console.log("Editing product:", item);
   }
   // update product
   const updateProduct = async (item) => {
     setLoading(true)
     try {
-      await setDoc(doc(fireDb, "products", products.id), products);
+      console.log("Updating product with data:", item);
+      
+      // Use updateDoc instead of setDoc to update existing document
+      const productRef = doc(fireDb, "products", item.id);
+      const updateData = {
+        title: item.title,
+        price: parseFloat(item.price),
+        category: item.category,
+        description: item.description,
+        weight: item.weight ? parseFloat(item.weight) : null,
+        imageUrl: item.imageUrl,
+        actualprice: item.actualprice || item.actualPrice,
+        lastUpdated: new Date().toLocaleString()
+      };
+      
+      console.log("Update data:", updateData);
+      await updateDoc(productRef, updateData);
+      
       toast.success("Product Updated successfully")
-      setTimeout(()=>{
-        window.location.href = '/dashboard'
-      }, 800)
       getProductData();
       setLoading(false)
       
     } catch (error) {
       setLoading(false)
-      console.log(error)
+      console.log("Error updating product:", error)
+      console.log("Error details:", error.code, error.message)
+      toast.error("Failed to update product. Please try again.")
     }
-    setProducts("")
   }
 
   const deleteProduct = async (item) => {
@@ -186,11 +157,24 @@ function MyState(props) {
       const result = await getDocs(collection(fireDb, "users"))
       const usersArray = [];
       result.forEach((doc) => {
-        usersArray.push(doc.data());
+        const userData = doc.data();
+        usersArray.push({
+          ...userData,
+          id: doc.id,
+          // Set default values for missing fields
+          pageVisits: userData.pageVisits || 0,
+          totalOrders: userData.totalOrders || 0,
+          totalSpent: userData.totalSpent || 0,
+          phone: userData.phone || 'Not provided',
+          address: userData.address || 'Not provided',
+          lastVisit: userData.lastVisit || 'Never',
+          isActive: userData.isActive !== false,
+          createdAt: userData.createdAt || userData.date || 'N/A'
+        });
         setLoading(false)
       });
       setUser(usersArray);
-      console.log(usersArray)
+      console.log('Enhanced user data:', usersArray)
       setLoading(false);
     } catch (error) {
       console.log(error)
@@ -198,8 +182,88 @@ function MyState(props) {
     }
   }
 
+  // Update user data with additional information
+  const updateUserData = async (userId, userData) => {
+    try {
+      const userRef = doc(fireDb, "users", userId);
+      await updateDoc(userRef, {
+        ...userData,
+        updatedAt: new Date().toLocaleString()
+      });
+      getUserData(); // Refresh user data
+      toast.success('User data updated successfully');
+    } catch (error) {
+      console.error('Error updating user data:', error);
+      toast.error('Failed to update user data');
+    }
+  };
 
+  // Track user activity
+  const trackUserActivity = async (userId, activityType, data = {}) => {
+    // Skip tracking if disabled
+    if (!trackingEnabled) {
+      console.log('User activity tracking is currently disabled');
+      return;
+    }
+    try {
+      const userRef = doc(fireDb, "users", userId);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        const currentData = userDoc.data();
+        let updateData = {};
+        switch (activityType) {
+          case 'page_visit':
+            updateData = {
+              pageVisits: (currentData.pageVisits || 0) + 1,
+              lastVisit: new Date().toLocaleString(),
+              isActive: true
+            };
+            break;
+          case 'order_placed':
+            updateData = {
+              totalOrders: (currentData.totalOrders || 0) + 1,
+              totalSpent: (currentData.totalSpent || 0) + (data.amount || 0),
+              lastOrderDate: new Date().toLocaleString()
+            };
+            break;
+          case 'profile_update':
+            updateData = {
+              ...data,
+              updatedAt: new Date().toLocaleString()
+            };
+            break;
+        }
+        await updateDoc(userRef, updateData);
+      } // Do not create a new user if not found
+    } catch (error) {
+      console.error('Error tracking user activity:', error);
+    }
+  };
 
+  // Function to re-enable tracking (can be called from admin panel)
+  const enableTracking = () => {
+    setTrackingEnabled(true);
+    localStorage.removeItem('trackingDisabled');
+    localStorage.removeItem('trackingDisabledAt');
+    console.log('User activity tracking re-enabled');
+  };
+
+  // Function to disable tracking manually
+  const disableTracking = () => {
+    setTrackingEnabled(false);
+    localStorage.setItem('trackingDisabled', 'true');
+    localStorage.setItem('trackingDisabledAt', new Date().toISOString());
+    console.log('User activity tracking manually disabled');
+  };
+
+  // Check if tracking was previously disabled on app start
+  useEffect(() => {
+    const trackingDisabled = localStorage.getItem('trackingDisabled');
+    if (trackingDisabled === 'true') {
+      setTrackingEnabled(false);
+      console.log('User activity tracking was previously disabled due to quota issues');
+    }
+  }, []);
 
   useEffect(() => {
     getProductData();
@@ -210,8 +274,9 @@ function MyState(props) {
 
   return (
     <MyContext.Provider value={{ 
-      mode, toggleMode, loading,setLoading,
-      products, setProducts,addProduct, product,edithandle,updateProduct, deleteProduct,order,user,searchkey,setSearchkey}}>
+      loading, setLoading,
+      addProduct, product, edithandle, updateProduct, deleteProduct, order, user, searchkey, setSearchkey,
+      getUserData, updateUserData, trackUserActivity, enableTracking, disableTracking, trackingEnabled}}>
       {props.children}
     </MyContext.Provider>
   )
