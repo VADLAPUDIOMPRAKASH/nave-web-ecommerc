@@ -12,6 +12,9 @@ export default {
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
       },
+      screens: {
+        'xs': '475px',
+      },
     },
     fontWeight: {
       normal: '400',

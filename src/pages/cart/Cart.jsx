@@ -3,14 +3,17 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Leaf, ShoppingBag, ArrowLeft } from 'lucide-react';
 import { deleteFromCart, incrementQuantity, decrementQuantity, clearCart} from '../../redux/cartSlice';
 import { toast } from 'react-toastify';
-import { addDoc, collection } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, where, Timestamp } from 'firebase/firestore';
 import { fireDB } from '../../firebase/FirebaseConfig.jsx';
 import Layout from '../../components/layout/Layout';
 import Modal from '../../components/modal/Modal';
 import myContext from '../../context/data/myContext';
-import { Link } from 'react-router-dom';
+import { Link } from '@tanstack/react-router';
+import AuthModal from '../../components/auth/AuthModal';
+import { useUserTracking } from '../../hooks/useUserTracking';
 
 function Cart() {
+  const { trackPage } = useUserTracking();
   const context = useContext(myContext);
   const { mode } = context;
   const dispatch = useDispatch();
@@ -23,24 +26,62 @@ function Cart() {
   
   const [totalAmount, setTotalAmount] = useState(0);
   const [totalWeight, setTotalWeight] = useState(0);
+  const [totalLeafyPieces, setTotalLeafyPieces] = useState(0);
 
   // Constants for quantity management
-  const MIN_QUANTITY = 0.25;
-  const QUANTITY_STEP = 0.25;
+  const MIN_QUANTITY = 0.50;
+  const QUANTITY_STEP = 0.50;
+
+  // Constants for leafy vegetables
+  const LEAFY_MIN_QUANTITY = 1;
+  const LEAFY_QUANTITY_STEP = 1;
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [userDetailsLoaded, setUserDetailsLoaded] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState("");
+  const [houseNo, setHouseNo] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [blockNo, setBlockNo] = useState("");
+  const [showNotice, setShowNotice] = useState(false);
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("Telangana");
+  const [timingSettings, setTimingSettings] = useState({
+    orderStartTime: '08:00',
+    orderEndTime: '22:00',
+    lateOrderCutoffTime: '21:00'
+  });
+
+  // Track page visit
+  useEffect(() => {
+    trackPage('cart');
+  }, [trackPage]);
 
   useEffect(() => {
     let tempAmount = 0;
     let tempWeight = 0;
+    let tempLeafyPieces = 0;
+
     cartItems.forEach((item) => {
       const itemPrice = Number(item.price) || 0;
-      const itemQuantity = Number(item.quantity) || MIN_QUANTITY;
-      const itemWeight = Number(item.weight) || 0;
-      
-      tempAmount += itemPrice * itemQuantity;
-      tempWeight += itemWeight * itemQuantity;
+      const itemQuantity = item.category === 'Leafy Vegetables' 
+        ? parseInt(item.quantity || LEAFY_MIN_QUANTITY, 10)
+        : Number(item.quantity || MIN_QUANTITY);
+
+      // Calculate total amount based on category
+      if (item.category === 'Leafy Vegetables') {
+        tempLeafyPieces += itemQuantity;
+        tempAmount += itemPrice * itemQuantity; // Price per piece for leafy vegetables
+      } else {
+        tempWeight += itemQuantity;
+        tempAmount += itemPrice * itemQuantity; // Price per kg for regular vegetables
+      }
     });
-    setTotalAmount(tempAmount);
-    setTotalWeight(tempWeight);
+
+    setTotalAmount(Number(tempAmount.toFixed(2)));
+    setTotalWeight(Number(tempWeight.toFixed(2)));
+    setTotalLeafyPieces(tempLeafyPieces);
   }, [cartItems]);
 
   const grandTotal = totalAmount;
@@ -51,34 +92,63 @@ function Cart() {
   };
 
   const handleIncrement = (item) => {
+    if (item.category === 'Leafy Vegetables') {
+      const newQuantity = Number(item.quantity || LEAFY_MIN_QUANTITY) + LEAFY_QUANTITY_STEP;
+      let safeItem = { ...item, quantity: newQuantity };
+      if (safeItem.time && safeItem.time.toDate) {
+        safeItem.time = safeItem.time.toDate().toISOString();
+      }
+      dispatch({ type: 'cart/incrementQuantity', payload: safeItem });
+    } else {
     const newQuantity = Number((Number(item.quantity || MIN_QUANTITY) + QUANTITY_STEP).toFixed(2));
     dispatch(incrementQuantity({ ...item, quantity: newQuantity }));
+    }
   };
 
   const handleDecrement = (item) => {
+    if (item.category === 'Leafy Vegetables') {
+      const currentQuantity = Number(item.quantity || LEAFY_MIN_QUANTITY);
+      if (currentQuantity > LEAFY_MIN_QUANTITY) {
+        const newQuantity = currentQuantity - LEAFY_QUANTITY_STEP;
+        let safeItem = { ...item, quantity: newQuantity };
+        if (safeItem.time && safeItem.time.toDate) {
+          safeItem.time = safeItem.time.toDate().toISOString();
+        }
+        dispatch({ type: 'cart/incrementQuantity', payload: safeItem });
+      } else {
+        dispatch(deleteFromCart(item));
+        toast.success('Item removed from cart');
+      }
+    } else {
     const currentQuantity = Number(item.quantity || MIN_QUANTITY);
-    
     if (currentQuantity > MIN_QUANTITY) {
       const newQuantity = Number((currentQuantity - QUANTITY_STEP).toFixed(2));
       dispatch(decrementQuantity({ ...item, quantity: newQuantity }));
     } else {
       dispatch(deleteFromCart(item));
       toast.success('Item removed from cart');
+      }
     }
   };
 
   const buyNow = async () => {
-    if (!name || !address || !pincode || !phoneNumber) {
+    if (!name || !address || !pincode || !phoneNumber || !houseNo || !landmark || !blockNo) {
       toast.error("All fields are required", { position: "top-center", autoClose: 1000, theme: "colored" });
       return;
     }
   
     try {
+      const userData = JSON.parse(localStorage.getItem('user'));
+      const userId = userData?.user?.uid;
+      
       const addressInfo = {
         name,
         address,
         pincode,
         phoneNumber,
+        houseNo,
+        landmark,
+        blockNo,
         date: new Date().toLocaleString("en-US", {
           month: "short",
           day: "2-digit",
@@ -86,12 +156,49 @@ function Cart() {
         })
       };
   
-      await addDoc(collection(fireDB, "orders"), { ...addressInfo, cartItems, totalAmount, grandTotal });
+      // Generate custom orderId
+      const now = new Date();
+      const year = now.getFullYear();
+      const date = String(now.getDate()).padStart(2, '0');
+      const month = now.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+      // Query for today's orders to get the count
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const ordersRef = collection(fireDB, "orders");
+      const q = query(
+        ordersRef,
+        where("timestamp", ">=", Timestamp.fromDate(startOfDay)),
+        where("timestamp", "<=", Timestamp.fromDate(endOfDay))
+      );
+      const snapshot = await getDocs(q);
+      const orderCount = snapshot.size + 1;
+      const number = String(orderCount).padStart(5, '0');
+      const orderId = `${year}${date}${month}${number}`;
+  
+      // Add order to Firebase
+      const orderData = { 
+        ...addressInfo, 
+        cartItems, 
+        totalAmount, 
+        grandTotal,
+        userid: userId, // Add user ID to track orders
+        timestamp: Timestamp.fromDate(now),
+        orderId // Store the custom orderId
+      };
+      
+      await addDoc(collection(fireDB, "orders"), orderData);
+      
+      // Track user order activity if user is logged in
+      if (userId && context.trackUserActivity) {
+        await context.trackUserActivity(userId, 'order_placed', { amount: grandTotal });
+      }
+      
       toast.success("Order placed successfully!");
   
       dispatch(clearCart());
       localStorage.removeItem('cart');
     } catch (error) {
+      console.error("Order placement error:", error);
       toast.error("Failed to place order. Please try again.");
     }
   };
@@ -99,6 +206,87 @@ function Cart() {
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cartItems));
   }, [cartItems]);
+
+  // Fetch user details if logged in
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        const uid = user?.user?.uid;
+        setUserId(uid);
+        setUserEmail(user?.user?.email || "");
+        if (uid) {
+          // Fetch user details from Firestore
+          const fetchUserDetails = async () => {
+            const userRef = doc(fireDB, 'users', uid);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+              const data = userSnap.data();
+              setName(data.name || "");
+              setAddress(data.address || "");
+              setPincode(data.pincode || "");
+              setPhoneNumber(data.phone || "");
+              setHouseNo(data.houseNo || "");
+              setLandmark(data.landmark || "");
+              setBlockNo(data.blockNo || "");
+            }
+            setUserDetailsLoaded(true);
+          };
+          fetchUserDetails();
+        }
+      } catch (err) {
+        setUserDetailsLoaded(true);
+      }
+    } else {
+      setUserDetailsLoaded(true);
+    }
+    // Show order timing notice only once per session
+    if (!sessionStorage.getItem('orderNoticeAccepted')) {
+      setShowNotice(true);
+    }
+  }, []);
+
+  // Handler for Order Now button
+  const handleOrderNow = () => {
+    const userData = localStorage.getItem('user');
+    if (!userData) {
+      setShowLoginModal(true);
+      return;
+    }
+    // If any required field is missing, prompt user to fill
+    if (!name || !address || !pincode || !phoneNumber || !houseNo || !landmark || !blockNo) {
+      toast.error("Please fill all delivery details", { position: "top-center", autoClose: 1500, theme: "colored" });
+      return;
+    }
+    // All details present, show confirmation modal
+    setShowConfirmModal(true);
+  };
+
+  // Handler for confirming order
+  const handleConfirmOrder = async () => {
+    setShowConfirmModal(false);
+    await buyNow();
+  };
+
+  const handleNoticeOkay = () => {
+    setShowNotice(false);
+    sessionStorage.setItem('orderNoticeAccepted', 'true');
+  };
+
+  useEffect(() => {
+    const fetchTimingSettings = async () => {
+      try {
+        const timingDoc = await getDoc(doc(fireDB, 'settings', 'timing'));
+        if (timingDoc.exists()) {
+          setTimingSettings(timingDoc.data());
+        }
+      } catch (err) {
+        console.error('Error fetching timing settings:', err);
+      }
+    };
+    fetchTimingSettings();
+  }, []);
 
   return (
     <Layout>
@@ -149,8 +337,7 @@ function Cart() {
               ) : (
                 <div className="space-y-3">
                   {cartItems.map((item) => (
-                    <div key={item.id} className="bg-white rounded-lg shadow-sm p-3 flex items-center gap-3" style={{
-                      backgroundColor: mode === 'dark' ? 'rgb(32 33 34)' : '',
+                    <div key={item.id} className="rounded-lg shadow-sm p-3 flex items-center gap-3 bg-green-50 dark:bg-green-100" style={{
                       color: mode === 'dark' ? 'white' : ''
                     }}>
                       {/* Image */}
@@ -189,31 +376,60 @@ function Cart() {
                         
                         <div className="mt-2 sm:mt-3 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => handleDecrement(item)}
-                              className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-                              style={{ backgroundColor: mode === 'dark' ? '#444' : '' }}
-                            >
-                              -
-                            </button>
-                            <span className="w-16 sm:w-20 text-center text-sm sm:text-base">
-                              {Number(item.quantity || MIN_QUANTITY).toFixed(2)}kg
-                            </span>
-                            <button 
-                              onClick={() => handleIncrement(item)}
-                              className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-                              style={{ backgroundColor: mode === 'dark' ? '#444' : '' }}
-                            >
-                              +
-                            </button>
+                            {item.category === 'Leafy Vegetables' ? (
+                              <select
+                                className="w-32 px-3 py-2 rounded-lg bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-transparent font-semibold text-gray-900"
+                                value={parseInt(item.quantity || LEAFY_MIN_QUANTITY, 10)}
+                                onChange={e => {
+                                  const newQuantity = Number(e.target.value);
+                                  let safeItem = { ...item, quantity: newQuantity };
+                                  if (safeItem.time && safeItem.time.toDate) {
+                                    safeItem.time = safeItem.time.toDate().toISOString();
+                                  }
+                                  dispatch({ type: 'cart/incrementQuantity', payload: safeItem });
+                                }}
+                              >
+                                {Array.from({ length: 20 }, (_, i) => i + 1).map(num => (
+                                  <option key={num} value={num}>{num} piece{num > 1 ? 's' : ''}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <>
+                              <button 
+                                onClick={() => handleDecrement(item)}
+                                className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                                style={{ backgroundColor: mode === 'dark' ? '#444' : '' }}
+                              >
+                                -
+                              </button>
+                              <span className="w-16 sm:w-20 text-center text-sm sm:text-base">
+                                {`${Number(item.quantity || MIN_QUANTITY).toFixed(2)}kg`}
+                              </span>
+                              <button 
+                                onClick={() => handleIncrement(item)}
+                                className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                                style={{ backgroundColor: mode === 'dark' ? '#444' : '' }}
+                              >
+                                +
+                              </button>
+                              </>
+                            )}
                           </div>
                           <div className="flex flex-col items-end">
-                            <p className="font-medium text-sm sm:text-base">
-                              ₹{(Number(item.price) * Number(item.quantity || MIN_QUANTITY)).toFixed(2)}
-                            </p>
                             {item.actualprice > item.price && (
-                              <p className="text-xs sm:text-sm text-gray-500 line-through" style={{ color: mode === 'dark' ? '#999' : '' }}>
-                                ₹{(Number(item.actualprice) * Number(item.quantity || MIN_QUANTITY)).toFixed(2)}
+                              <p className="text-xs sm:text-sm text-gray-500 line-through">
+                                {item.category === 'Leafy Vegetables'
+                                  ? `${parseInt(item.quantity, 10)} x ₹${Number(item.actualprice)} = ₹${(parseInt(item.quantity, 10) * Number(item.actualprice)).toFixed(2)}`
+                                  : `₹${(Number(item.actualprice) * Number(item.quantity || MIN_QUANTITY)).toFixed(2)}`}
+                              </p>
+                            )}
+                            {item.category === 'Leafy Vegetables' ? (
+                              <p className="font-medium text-sm sm:text-base">
+                                {parseInt(item.quantity, 10)} x ₹{Number(item.price)} = ₹{(parseInt(item.quantity, 10) * Number(item.price)).toFixed(2)}
+                              </p>
+                            ) : (
+                              <p className="font-medium text-sm sm:text-base">
+                                ₹{(Number(item.price) * Number(item.quantity || MIN_QUANTITY)).toFixed(2)}
                               </p>
                             )}
                           </div>
@@ -225,60 +441,139 @@ function Cart() {
               )}
             </div>
 
-            {/* Order Summary Section */}
-            <div className="lg:w-1/3 mt-6 lg:mt-0">
-              <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 sticky top-[84px]" style={{
-                backgroundColor: mode === 'dark' ? 'rgb(32 33 34)' : '',
-                color: mode === 'dark' ? 'white' : ''
-              }}>
-                <h2 className="text-lg sm:text-xl font-semibold mb-4">Order Summary</h2>
-                
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm sm:text-base">
-                    <span className="text-gray-600" style={{ color: mode === 'dark' ? '#999' : '' }}>Subtotal</span>
-                    <span>₹{totalAmount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm sm:text-base">
-                    <span className="text-gray-600" style={{ color: mode === 'dark' ? '#999' : '' }}>Total Weight</span>
-                    <span>{totalWeight.toFixed(2)} kg</span>
-                  </div>
+            {/* Order Summary Section - Only show when cart has items */}
+            {cartItems.length > 0 && (
+              <div className="lg:w-1/3 mt-6 lg:mt-0">
+                <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 sticky top-[84px]" style={{
+                  backgroundColor: mode === 'dark' ? 'rgb(32 33 34)' : '',
+                  color: mode === 'dark' ? 'white' : ''
+                }}>
+                  <h2 className="text-lg sm:text-xl font-semibold mb-4">Order Summary</h2>
                   
-                  <div className="h-px bg-gray-200 my-3" style={{ backgroundColor: mode === 'dark' ? '#374151' : '' }}></div>
-                  
-                  <div className="flex justify-between text-base sm:text-lg font-semibold">
-                    <span>Total</span>
-                    <span>₹{grandTotal.toFixed(2)}</span>
+                  {/* Individual Product Summary */}
+                  <div className="mb-4">
+                    <h3 className="text-base font-semibold mb-2">Individual Product Summary</h3>
+                    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {cartItems.map((item) => (
+                        <li key={item.id} className="py-2 flex items-center justify-between">
+                          {/* Product Name */}
+                          <span className="truncate max-w-[120px] flex-1" title={item.title}>{item.title}</span>
+                          {/* Quantity/Weight */}
+                          <span className="w-24 text-center">
+                            {item.category === 'Leafy Vegetables'
+                              ? `${parseInt(item.quantity || LEAFY_MIN_QUANTITY, 10)} piece${parseInt(item.quantity || LEAFY_MIN_QUANTITY, 10) > 1 ? 's' : ''}`
+                              : `${Number(item.quantity || MIN_QUANTITY).toFixed(2)} kg`}
+                          </span>
+                          {/* Price */}
+                          <span className="w-28 text-right font-medium">
+                            ₹{((item.category === 'Leafy Vegetables' 
+                              ? parseInt(item.quantity || LEAFY_MIN_QUANTITY, 10) 
+                              : Number(item.quantity || MIN_QUANTITY)) * Number(item.price)).toFixed(2)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                </div>
 
-                <Modal
-                  name={name}
-                  address={address}
-                  pincode={pincode}
-                  phoneNumber={phoneNumber}
-                  setName={setName}
-                  setAddress={setAddress}
-                  setPincode={setPincode}
-                  setPhoneNumber={setPhoneNumber}
-                  cartItems={cartItems}
-                  totalAmount={totalAmount}
-                />
-                
-                <div className="mt-4 text-xs sm:text-sm text-gray-500" style={{ color: mode === 'dark' ? '#999' : '' }}>
-                  <div className="flex items-center gap-1 mb-1">
-                    <Leaf className="w-4 h-4 text-green-600" />
-                    <span>Free delivery on orders over 5kg</span>
+                  {/* Overall Summary */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm sm:text-base">
+                      <span className="text-gray-600" style={{ color: mode === 'dark' ? '#999' : '' }}>Subtotal</span>
+                      <span>₹{totalAmount.toFixed(2)}</span>
+                    </div>
+                    {totalWeight > 0 && (
+                      <div className="flex justify-between text-sm sm:text-base items-center">
+                        <span className="text-gray-600" style={{ color: mode === 'dark' ? '#999' : '' }}>Total Weight (Vegetables)</span>
+                        <span>{totalWeight.toFixed(2)} kg</span>
+                      </div>
+                    )}
+                    {totalLeafyPieces > 0 && (
+                      <div className="flex justify-between text-sm sm:text-base items-center">
+                        <span className="text-gray-600" style={{ color: mode === 'dark' ? '#999' : '' }}>Leafy Vegetables</span>
+                        <span>{totalLeafyPieces} {totalLeafyPieces === 1 ? 'piece' : 'pieces'}</span>
+                      </div>
+                    )}
+                    <div className="h-px bg-gray-200 my-3" style={{ backgroundColor: mode === 'dark' ? '#374151' : '' }}></div>
+                    <div className="flex justify-between text-base sm:text-lg font-semibold">
+                      <span>Total</span>
+                      <span>₹{totalAmount.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <ShoppingBag className="w-4 h-4 text-green-600" />
-                    <span>All vegetables are fresh from local farmers</span>
-                  </div>
+
+                  <Modal
+                    name={name}
+                    address={address}
+                    pincode={pincode}
+                    phoneNumber={phoneNumber}
+                    setName={setName}
+                    setAddress={setAddress}
+                    setPincode={setPincode}
+                    setPhoneNumber={setPhoneNumber}
+                    cartItems={cartItems}
+                    totalAmount={totalAmount}
+                    houseNo={houseNo}
+                    setHouseNo={setHouseNo}
+                    landmark={landmark}
+                    setLandmark={setLandmark}
+                    blockNo={blockNo}
+                    setBlockNo={setBlockNo}
+                    userEmail={userEmail}
+                    city={city}
+                    setCity={setCity}
+                    state={state}
+                    setState={setState}
+                  />
+                  
+                 
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Login Modal */}
+      <AuthModal isOpen={showLoginModal} closeModal={() => setShowLoginModal(false)} initialMode="login" />
+      {/* Confirm Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full text-center">
+            <h2 className="text-3xl font-extrabold mb-4 text-green-700 bg-gradient-to-r from-pink-400 via-green-400 to-blue-400 bg-clip-text text-transparent">Complete Your Order</h2>
+            <div className="mb-6 text-left space-y-2">
+              <div><strong>Name:</strong> {name}</div>
+              <div><strong>Phone:</strong> {phoneNumber}</div>
+              <div><strong>Email:</strong> {userEmail}</div>
+              <div><strong>Address:</strong> {address}</div>
+              <div><strong>House/Door/Flat No:</strong> {houseNo}</div>
+              <div><strong>Block No/Road No:</strong> {blockNo}</div>
+              <div><strong>Landmark:</strong> {landmark}</div>
+              <div><strong>Pincode:</strong> {pincode}</div>
+            </div>
+            <div className="mb-4 text-gray-600">Please confirm your details before proceeding.</div>
+            <button onClick={handleConfirmOrder} className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition">Confirm & Place Order</button>
+            <button onClick={() => setShowConfirmModal(false)} className="ml-4 px-6 py-2 rounded-lg font-semibold border border-gray-300 hover:bg-gray-100 transition">Cancel</button>
+          </div>
+        </div>
+      )}
+      {/* Order Timing Notice Modal */}
+      {showNotice && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          {/* Blurred overlay */}
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+          {/* Modal */}
+          <div className="relative bg-white rounded-xl shadow-2xl px-8 py-6 max-w-md w-full text-center border-2 border-green-600">
+            <div className="text-green-700 text-lg font-semibold mb-2">
+              Order Times: {timingSettings.orderStartTime} – {timingSettings.orderEndTime}
+            </div>
+            <div className="text-gray-700 mb-4">
+              Orders placed after {timingSettings.lateOrderCutoffTime} will be delivered with the next day's harvest.
+            </div>
+            <button onClick={handleNoticeOkay} className="mt-2 px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
+              Accept
+            </button>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
