@@ -1,8 +1,9 @@
 import { useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from '@tanstack/react-router';
 import { FiMail, FiPhone, FiMapPin, FiFacebook, FiTwitter, FiInstagram, FiLinkedin } from 'react-icons/fi';
 import { Leaf } from 'lucide-react';
 import myContext from '../../context/data/myContext';
+import TermsModal from '../modal/TermsModal';
 
 export default function Footer() {
     const context = useContext(myContext);
@@ -27,16 +28,11 @@ export default function Footer() {
                             Connecting farmers directly with consumers, delivering fresh vegetables within 8 hours of harvest.
                         </p>
                         <div className="flex items-center gap-4">
-                            <a href="#" className="text-gray-400 hover:text-green-600 transition-colors">
-                                <FiFacebook className="w-5 h-5" />
-                            </a>
-                            <a href="#" className="text-gray-400 hover:text-green-600 transition-colors">
-                                <FiTwitter className="w-5 h-5" />
-                            </a>
-                            <a href="#" className="text-gray-400 hover:text-green-600 transition-colors">
+                           
+                            <a href="https://www.instagram.com/navedhana.pvt.ltd/" className="text-gray-400 hover:text-green-600 transition-colors">
                                 <FiInstagram className="w-5 h-5" />
                             </a>
-                            <a href="#" className="text-gray-400 hover:text-green-600 transition-colors">
+                            <a href="https://www.linkedin.com/company/navedhana-profit-amplifier-private-limited" className="text-gray-400 hover:text-green-600 transition-colors">
                                 <FiLinkedin className="w-5 h-5" />
                             </a>
                         </div>
@@ -82,19 +78,15 @@ export default function Footer() {
                         </h3>
                         <ul className="space-y-2">
                             <li>
-                                <Link to="/returnpolicy" className="text-sm hover:text-green-600 transition-colors">
-                                    Return Policy
+                                <Link to="/terms" className="text-sm hover:text-green-600 transition-colors">
+                                   Terms & conditions
                                 </Link>
                             </li>
+                            
                             <li>
-                                <Link to="/privacypolicy" className="text-sm hover:text-green-600 transition-colors">
-                                    Privacy Policy
-                                </Link>
-                            </li>
-                            <li>
-                                <Link to="/contact" className="text-sm hover:text-green-600 transition-colors">
+                                <a href="mailto:navedhanaprofitamplifier@gmail.com" className="text-sm hover:text-green-600 transition-colors">
                                     Contact Us
-                                </Link>
+                                </a>
                             </li>
                         </ul>
                     </div>
@@ -110,16 +102,16 @@ export default function Footer() {
                             <li className="flex items-start gap-3">
                                 <FiMapPin className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                                 <span className="text-sm">
-                                    123 Farmer's Market Street, Hyderabad, Telangana 500032
+                                    KASE Incubation Centre, Hyderabad, Telangana
                                 </span>
                             </li>
                             <li className="flex items-center gap-3">
                                 <FiPhone className="w-5 h-5 text-green-600 flex-shrink-0" />
-                                <span className="text-sm">+91 (800) 123-4567</span>
+                                <span className="text-sm">+91 7981002950</span>
                             </li>
                             <li className="flex items-center gap-3">
                                 <FiMail className="w-5 h-5 text-green-600 flex-shrink-0" />
-                                <span className="text-sm">support@navedhana.com</span>
+                                <span className="text-sm">navedhanaprofitamplifier@gmail.com</span>
                             </li>
                         </ul>
                     </div>
