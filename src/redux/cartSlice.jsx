@@ -40,9 +40,15 @@ const cartSlice = createSlice({
         incrementQuantity(state, action) {
             const item = state.find(item => item.id === action.payload.id);
             if (item) {
+                if (typeof action.payload.quantity !== 'undefined') {
+                    // Set quantity directly (for dropdown/select)
+                    item.quantity = Number(action.payload.quantity);
+                } else {
+                    // Increment by step (for +/- buttons)
                 item.quantity = Number((
                     (Number(item.quantity) || MIN_QUANTITY) + QUANTITY_STEP
                 ).toFixed(2));
+                }
             }
             saveToLocalStorage(state);
         },

@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@tanstack/react-router';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { addDoc, collection } from "firebase/firestore";
 import { toast } from 'react-toastify';
@@ -10,17 +10,21 @@ import {
     FileText, 
     Image as ImageIcon,
     ArrowLeft,
-    Loader2
+    Loader2,
+    Upload,
+    Plus,
+    CheckCircle
 } from 'lucide-react';
 import myContext from '../../../context/data/myContext';
 import { fireDB, imgDB } from '../../../firebase/FirebaseConfig';
+import Loader from '../../../components/loader/Loader';
 
 function AddProduct() {
     const navigate = useNavigate();
     const context = useContext(myContext);
-    const { mode } = context;
+    const { mode, addProduct } = context;
 
-    const [product, setProduct] = useState({
+    const [formProduct, setFormProduct] = useState({
         title: '',
         price: '',
         category: '',
@@ -31,11 +35,13 @@ function AddProduct() {
     const [imageFile, setImageFile] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [errors, setErrors] = useState({});
 
     const categories = [
         'Vegetables',
         'Fruits',
         'Leafy Greens',
+        'Leafy Vegetables',
         'Root Vegetables',
         'Exotic Vegetables',
         'Organic Products'
@@ -55,10 +61,21 @@ function AddProduct() {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setProduct(prev => ({
+        setFormProduct(prev => ({
             ...prev,
             [name]: value
         }));
+        setErrors(prev => ({ ...prev, [name]: '' }));
+    };
+
+    const validate = () => {
+        const newErrors = {};
+        if (!formProduct.title) newErrors.title = 'Product name is required.';
+        if (!formProduct.price) newErrors.price = 'Price is required.';
+        if (!formProduct.category) newErrors.category = 'Category is required.';
+        if (!imageFile) newErrors.image = 'Product image is required.';
+        if (formProduct.actualPrice && Number(formProduct.actualPrice) < Number(formProduct.price)) newErrors.actualPrice = 'Original price should be greater than or equal to selling price.';
+        return newErrors;
     };
 
     const uploadImage = async () => {
@@ -70,42 +87,30 @@ function AddProduct() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const validationErrors = validate();
+        if (Object.keys(validationErrors).length > 0) {
+            setErrors(validationErrors);
+            return;
+        }
         setLoading(true);
-
         try {
-            // Validation
-            if (!product.title || !product.price || !product.category || !imageFile) {
-                toast.error('Please fill in all required fields and add an image');
-                return;
-            }
-
-            // Upload image
             const imageUrl = await uploadImage();
             if (!imageUrl) {
-                toast.error('Failed to upload image');
+                setErrors(prev => ({ ...prev, image: 'Failed to upload image.' }));
+                setLoading(false);
                 return;
             }
-
-            // Add product to Firestore
-            const productData = {
-                ...product,
+            
+            const newProduct = {
+                ...formProduct,
                 imageUrl,
-                date: new Date().toLocaleString(
-                    "en-US",
-                    {
-                        month: "short",
-                        day: "2-digit",
-                        year: "numeric",
-                    }
-                )
+                actualprice: formProduct.actualPrice || formProduct.price,
             };
-
-            await addDoc(collection(fireDB, "products"), productData);
+            
+            await addProduct(newProduct);
             toast.success('Product added successfully!');
             navigate('/dashboard');
-
         } catch (error) {
-            console.error('Error adding product:', error);
             toast.error('Failed to add product');
         } finally {
             setLoading(false);
@@ -113,48 +118,71 @@ function AddProduct() {
     };
 
     return (
-        <div className={`min-h-screen ${mode === 'dark' ? 'bg-gray-900' : 'bg-gray-100'}`}>
-            <div className="max-w-4xl mx-auto p-4">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 py-8 px-4">
+            <div className="max-w-4xl mx-auto">
                 {/* Header */}
+                <div className="mb-8">
                 <div className="flex items-center justify-between mb-6">
                     <button
                         onClick={() => navigate('/dashboard')}
-                        className={`flex items-center ${
-                            mode === 'dark' ? 'text-white hover:text-gray-300' : 'text-gray-700 hover:text-gray-900'
-                        }`}
+                            className="flex items-center px-4 py-2 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 text-gray-700 hover:text-blue-600 border border-gray-100"
                     >
                         <ArrowLeft className="w-5 h-5 mr-2" />
                         Back to Dashboard
                     </button>
-                    <h1 className={`text-2xl font-bold ${mode === 'dark' ? 'text-white' : 'text-gray-800'}`}>
+                        <div className="text-center">
+                            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
                         Add New Product
                     </h1>
+                            <p className="text-gray-600 mt-1">Create a new product listing</p>
+                        </div>
+                        <div className="w-24"></div> {/* Spacer for centering */}
+                    </div>
                 </div>
 
-                {/* Form */}
-                <div className={`${mode === 'dark' ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6`}>
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Image Upload */}
-                        <div className="space-y-2">
-                            <label className={`block text-sm font-medium ${mode === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                {/* Main Form Card */}
+                <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-600 to-green-600 px-8 py-6">
+                        <div className="flex items-center">
+                            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mr-4">
+                                <Plus className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-white">Product Information</h2>
+                                <p className="text-blue-100">Fill in the details below to add your product</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="p-8 space-y-8">
+                        {/* Image Upload Section */}
+                        <div className="space-y-4">
+                            <label className="block text-lg font-semibold text-gray-800 flex items-center">
+                                <ImageIcon className="w-5 h-5 mr-2 text-blue-600" />
                                 Product Image *
                             </label>
-                            <div className="flex items-center justify-center">
-                                <div className={`w-full max-w-md h-64 relative rounded-lg border-2 border-dashed ${
-                                    mode === 'dark' ? 'border-gray-600' : 'border-gray-300'
-                                } ${imagePreview ? 'p-0' : 'p-4'}`}>
+                            <div className="flex justify-center">
+                                <div className={`w-full max-w-md h-64 relative rounded-2xl border-2 border-dashed transition-all duration-300 ${
+                                    imagePreview 
+                                        ? 'border-green-300 bg-green-50' 
+                                        : 'border-blue-300 bg-blue-50 hover:border-blue-400 hover:bg-blue-100'
+                                } ${errors.image ? 'border-red-300 bg-red-50' : ''}`}>
                                     {imagePreview ? (
-                                        <img
-                                            src={imagePreview}
-                                            alt="Preview"
-                                            className="w-full h-full object-contain rounded-lg"
-                                        />
+                                        <div className="relative w-full h-full">
+                                            <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-2xl" />
+                                            <div className="absolute inset-0 bg-black/20 rounded-2xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                                <div className="bg-white/90 rounded-xl p-3">
+                                                    <Upload className="w-6 h-6 text-blue-600" />
+                                                </div>
+                                            </div>
+                                        </div>
                                     ) : (
-                                        <div className="h-full flex flex-col items-center justify-center">
-                                            <ImageIcon className={`w-12 h-12 ${mode === 'dark' ? 'text-gray-400' : 'text-gray-400'}`} />
-                                            <p className={`mt-2 text-sm ${mode === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                Click to upload or drag and drop
-                                            </p>
+                                        <div className="flex flex-col items-center justify-center h-full p-6">
+                                            <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
+                                                <ImageIcon className="w-8 h-8 text-blue-600" />
+                                            </div>
+                                            <p className="text-lg font-medium text-gray-700 mb-2">Upload Product Image</p>
+                                            <p className="text-sm text-gray-500 text-center">Click or drag to upload your product image</p>
                                         </div>
                                     )}
                                     <input
@@ -165,145 +193,197 @@ function AddProduct() {
                                     />
                                 </div>
                             </div>
+                            {errors.image && (
+                                <p className="text-red-500 text-sm flex items-center">
+                                    <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                    {errors.image}
+                                </p>
+                            )}
                         </div>
 
-                        {/* Product Details */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Title */}
-                            <div className="space-y-2">
-                                <label className={`block text-sm font-medium ${mode === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {/* Product Details Grid */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* Product Name */}
+                            <div className="space-y-3">
+                                <label className="block text-lg font-semibold text-gray-800 flex items-center">
+                                    <Package className="w-5 h-5 mr-2 text-blue-600" />
                                     Product Name *
                                 </label>
                                 <div className="relative">
-                                    <Package className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                                     <input
                                         type="text"
                                         name="title"
-                                        value={product.title}
+                                        value={formProduct.title}
                                         onChange={handleInputChange}
-                                        className={`w-full pl-10 pr-4 py-2 rounded-lg ${
-                                            mode === 'dark'
-                                                ? 'bg-gray-700 text-white placeholder-gray-400'
-                                                : 'bg-gray-50 text-gray-900 placeholder-gray-500'
-                                        } focus:outline-none focus:ring-2 focus:ring-green-500`}
+                                        className={`w-full px-4 py-4 rounded-xl border-2 transition-all duration-300 ${
+                                            errors.title 
+                                                ? 'border-red-300 bg-red-50 focus:border-red-500' 
+                                                : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white'
+                                        } focus:outline-none focus:ring-4 focus:ring-blue-100 text-gray-900 placeholder-gray-500`} 
                                         placeholder="Enter product name"
                                     />
+                                    {errors.title && (
+                                        <p className="text-red-500 text-sm mt-2 flex items-center">
+                                            <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                            {errors.title}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Category */}
-                            <div className="space-y-2">
-                                <label className={`block text-sm font-medium ${mode === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                            <div className="space-y-3">
+                                <label className="block text-lg font-semibold text-gray-800 flex items-center">
+                                    <Tags className="w-5 h-5 mr-2 text-blue-600" />
                                     Category *
                                 </label>
                                 <div className="relative">
-                                    <Tags className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                                     <select
                                         name="category"
-                                        value={product.category}
+                                        value={formProduct.category}
                                         onChange={handleInputChange}
-                                        className={`w-full pl-10 pr-4 py-2 rounded-lg ${
-                                            mode === 'dark'
-                                                ? 'bg-gray-700 text-white'
-                                                : 'bg-gray-50 text-gray-900'
-                                        } focus:outline-none focus:ring-2 focus:ring-green-500`}
+                                        className={`w-full px-4 py-4 rounded-xl border-2 transition-all duration-300 ${
+                                            errors.category 
+                                                ? 'border-red-300 bg-red-50 focus:border-red-500' 
+                                                : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white'
+                                        } focus:outline-none focus:ring-4 focus:ring-blue-100 text-gray-900`}
                                     >
                                         <option value="">Select category</option>
                                         {categories.map((category) => (
-                                            <option key={category} value={category}>
-                                                {category}
-                                            </option>
+                                            <option key={category} value={category}>{category}</option>
                                         ))}
                                     </select>
+                                    {errors.category && (
+                                        <p className="text-red-500 text-sm mt-2 flex items-center">
+                                            <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                            {errors.category}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Price */}
-                            <div className="space-y-2">
-                                <label className={`block text-sm font-medium ${mode === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                            <div className="space-y-3">
+                                <label className="block text-lg font-semibold text-gray-800 flex items-center">
+                                    <IndianRupee className="w-5 h-5 mr-2 text-blue-600" />
                                     Price (₹) *
                                 </label>
                                 <div className="relative">
-                                    <IndianRupee className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                    <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">₹</div>
                                     <input
                                         type="number"
                                         name="price"
-                                        value={product.price}
+                                        value={formProduct.price}
                                         onChange={handleInputChange}
-                                        className={`w-full pl-10 pr-4 py-2 rounded-lg ${
-                                            mode === 'dark'
-                                                ? 'bg-gray-700 text-white placeholder-gray-400'
-                                                : 'bg-gray-50 text-gray-900 placeholder-gray-500'
-                                        } focus:outline-none focus:ring-2 focus:ring-green-500`}
-                                        placeholder="Enter price"
+                                        className={`w-full pl-8 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${
+                                            errors.price 
+                                                ? 'border-red-300 bg-red-50 focus:border-red-500' 
+                                                : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white'
+                                        } focus:outline-none focus:ring-4 focus:ring-blue-100 text-gray-900 placeholder-gray-500`} 
+                                        placeholder="0.00" 
+                                        step="0.01"
+                                        min="0"
                                     />
+                                    {errors.price && (
+                                        <p className="text-red-500 text-sm mt-2 flex items-center">
+                                            <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                            {errors.price}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Weight */}
-                            <div className="space-y-2">
-                                <label className={`block text-sm font-medium ${mode === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                            <div className="space-y-3">
+                                <label className="block text-lg font-semibold text-gray-800 flex items-center">
+                                    <Package className="w-5 h-5 mr-2 text-blue-600" />
                                     Weight (kg)
                                 </label>
                                 <div className="relative">
-                                    <Package className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                                     <input
                                         type="number"
                                         name="weight"
-                                        value={product.weight}
+                                        value={formProduct.weight}
                                         onChange={handleInputChange}
-                                        className={`w-full pl-10 pr-4 py-2 rounded-lg ${
-                                            mode === 'dark'
-                                                ? 'bg-gray-700 text-white placeholder-gray-400'
-                                                : 'bg-gray-50 text-gray-900 placeholder-gray-500'
-                                        } focus:outline-none focus:ring-2 focus:ring-green-500`}
-                                        placeholder="Enter weight"
+                                        className="w-full px-4 py-4 rounded-xl border-2 border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 text-gray-900 placeholder-gray-500 transition-all duration-300" 
+                                        placeholder="0.00" 
                                         step="0.01"
+                                        min="0"
                                     />
+                                </div>
+                            </div>
+
+                            {/* Original Price (MRP) */}
+                            <div className="space-y-3">
+                                <label className="block text-lg font-semibold text-gray-800 flex items-center">
+                                    <IndianRupee className="w-5 h-5 mr-2 text-blue-600" />
+                                    Original Price (MRP)
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">₹</div>
+                                    <input
+                                        type="number"
+                                        name="actualPrice"
+                                        value={formProduct.actualPrice}
+                                        onChange={handleInputChange}
+                                        className={`w-full pl-8 pr-4 py-4 rounded-xl border-2 transition-all duration-300 ${
+                                            errors.actualPrice 
+                                                ? 'border-red-300 bg-red-50 focus:border-red-500' 
+                                                : 'border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white'
+                                        } focus:outline-none focus:ring-4 focus:ring-blue-100 text-gray-900 placeholder-gray-500`} 
+                                        placeholder="0.00" 
+                                        step="0.01"
+                                        min="0"
+                                    />
+                                    {errors.actualPrice && (
+                                        <p className="text-red-500 text-sm mt-2 flex items-center">
+                                            <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                            {errors.actualPrice}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
                         {/* Description */}
-                        <div className="space-y-2">
-                            <label className={`block text-sm font-medium ${mode === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                        <div className="space-y-3">
+                            <label className="block text-lg font-semibold text-gray-800 flex items-center">
+                                <FileText className="w-5 h-5 mr-2 text-blue-600" />
                                 Description
                             </label>
                             <div className="relative">
-                                <FileText className="w-5 h-5 absolute left-3 top-3 text-gray-400" />
                                 <textarea
                                     name="description"
-                                    value={product.description}
+                                    value={formProduct.description}
                                     onChange={handleInputChange}
                                     rows="4"
-                                    className={`w-full pl-10 pr-4 py-2 rounded-lg ${
-                                        mode === 'dark'
-                                            ? 'bg-gray-700 text-white placeholder-gray-400'
-                                            : 'bg-gray-50 text-gray-900 placeholder-gray-500'
-                                    } focus:outline-none focus:ring-2 focus:ring-green-500`}
-                                    placeholder="Enter product description"
+                                    className="w-full px-4 py-4 rounded-xl border-2 border-gray-200 bg-gray-50 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100 text-gray-900 placeholder-gray-500 transition-all duration-300 resize-none" 
+                                    placeholder="Enter product description..." 
                                 />
                             </div>
                         </div>
 
                         {/* Submit Button */}
-                        <div className="flex justify-end">
+                        <div className="flex justify-center pt-6">
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className={`flex items-center px-6 py-3 rounded-lg text-white ${
+                                className={`flex items-center px-8 py-4 rounded-2xl text-white font-semibold text-lg transition-all duration-300 transform hover:scale-105 ${
                                     loading
                                         ? 'bg-gray-400 cursor-not-allowed'
-                                        : 'bg-green-500 hover:bg-green-600'
+                                        : 'bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 shadow-lg hover:shadow-xl'
                                 }`}
                             >
                                 {loading ? (
                                     <>
-                                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                        <Loader2 className="w-6 h-6 mr-3 animate-spin" />
                                         Adding Product...
                                     </>
                                 ) : (
-                                    'Add Product'
+                                    <>
+                                        <CheckCircle className="w-6 h-6 mr-3" />
+                                        Add Product
+                                    </>
                                 )}
                             </button>
                         </div>
