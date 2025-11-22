@@ -17,7 +17,8 @@ import {
   Menu,
   X,
   Home,
-  Shield
+  Shield,
+  ArrowLeft
 } from 'lucide-react';
 import myContext from '../../../context/data/myContext';
 import { fireDB } from '../../../firebase/FirebaseConfig';
@@ -109,7 +110,7 @@ function Dashboard() {
     const handleLogout = () => {
         localStorage.clear('user');
         localStorage.removeItem('userRole');
-        navigate('/');
+        navigate({ to: '/' });
     };
 
     const closeSidebar = () => {
@@ -398,7 +399,7 @@ function Dashboard() {
                             </div>
                         </div>
                         <button
-                            onClick={() => navigate('/')}
+                            onClick={() => navigate({ to: '/' })}
                             className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
                             title="Go to Home"
                         >
@@ -426,6 +427,15 @@ function Dashboard() {
 
                 {/* Content Area */}
                 <div className={`${userRole === 'delivery_boy' && isMobile ? 'p-2' : 'p-4 lg:p-8'}`}>
+                    {/* Back Button */}
+                    <button
+                        onClick={() => navigate({ to: '/' })}
+                        className="mb-4 lg:mb-6 flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 border border-gray-200 hover:border-gray-300"
+                        title="Go to Home"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-medium">Back to Home</span>
+                    </button>
                     {/* Stats Grid - Only show for admin users */}
                     {userRole !== 'delivery_boy' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-8 mb-6 lg:mb-10">

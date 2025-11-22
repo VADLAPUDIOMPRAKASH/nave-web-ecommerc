@@ -200,7 +200,7 @@ function Allproducts() {
                                     {actualprice > price && (
                                         <span className="text-xs text-gray-400 line-through">₹{actualprice}</span>
                                     )}
-                                    <span className="text-xs text-gray-500">/kg</span>
+                                    <span className="text-xs text-gray-500">{category === 'Leafy Vegetables' ? 'per pieces' : '/kg'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -276,7 +276,7 @@ function Allproducts() {
                                         {actualprice > price && (
                                             <span className="text-xs md:text-sm text-gray-400 line-through">₹{actualprice}</span>
                                         )}
-                                        <span className="text-xs md:text-sm text-gray-500">/kg</span>
+                                        <span className="text-xs md:text-sm text-gray-500">{category === 'Leafy Vegetables' ? 'per pieces' : '/kg'}</span>
                                     </div>
                                 </div>
                                 <button

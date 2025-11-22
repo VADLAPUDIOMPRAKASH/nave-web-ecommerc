@@ -305,7 +305,7 @@ function ProductCard() {
                                                 {actualprice > price && (
                                                     <span className="text-xs text-gray-400 line-through">₹{actualprice}</span>
                                                 )}
-                                                <span className="text-xs text-gray-500">/kg</span>
+                                                <span className="text-xs text-gray-500">{category === 'Leafy Vegetables' ? 'per pieces' : '/kg'}</span>
                                             </div>
                                         </div>
                                         {/* Add To Cart Button - only adds to cart */}
@@ -390,7 +390,7 @@ function ProductCard() {
                                             {item.actualprice > item.price && (
                                                 <span className="text-xs text-gray-400 line-through">₹{item.actualprice}</span>
                                             )}
-                                            <span className="text-xs text-gray-500">/kg</span>
+                                            <span className="text-xs text-gray-500">{item.category === 'Leafy Vegetables' ? 'per pieces' : '/kg'}</span>
                                         </div>
                                     </div>
                                 </div>
