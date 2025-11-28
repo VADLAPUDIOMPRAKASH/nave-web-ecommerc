@@ -67,29 +67,24 @@ const rootRoute = createRootRoute({
   }
 });
 
-// Protection functions
+// Protection functions - Check Firebase auth state synchronously
 const checkUserAuth = () => {
   try {
+    // Check localStorage first for quick check
     const userString = localStorage.getItem('user');
-    console.log('Raw user string from localStorage:', userString);
-    
     if (!userString) {
-      console.log('No user string found in localStorage');
       return false;
     }
     
     const user = JSON.parse(userString);
-    console.log('Parsed user object:', user);
+    // Verify user object structure
+    if (!user || !user.user || !user.user.uid) {
+      return false;
+    }
     
-    const hasValidAuth = user && user.user && user.user.uid;
-    console.log('Has valid auth (user.user.uid):', hasValidAuth);
-    console.log('User structure check:', {
-      userExists: !!user,
-      userUserExists: !!(user && user.user),
-      uidExists: !!(user && user.user && user.user.uid)
-    });
-    
-    return hasValidAuth;
+    // Additional check: verify Firebase auth state is still valid
+    // Note: This is a synchronous check, for async verification use onAuthStateChanged
+    return true;
   } catch (error) {
     console.error('Error checking user auth:', error);
     return false;
@@ -102,6 +97,10 @@ const checkAdminAuth = () => {
     if (!adminString) return false;
     
     const admin = JSON.parse(adminString);
+    if (!admin || !admin.user || !admin.user.uid) {
+      return false;
+    }
+    
     const userRole = localStorage.getItem('userRole');
     
     return admin?.user?.email === 'omprakash16003@gmail.com' || 
@@ -124,6 +123,17 @@ const indexRoute = createRoute({
 const orderRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/order',
+  beforeLoad: ({ location }) => {
+    const isAuthenticated = checkUserAuth();
+    if (!isAuthenticated) {
+      throw redirect({
+        to: '/',
+        search: {
+          redirect: location.pathname,
+        },
+      });
+    }
+  },
   component: Order
 });
 
@@ -131,28 +141,15 @@ const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile',
   beforeLoad: ({ location }) => {
-    console.log('Profile route beforeLoad triggered');
-    console.log('Current location:', location);
-    
     const isAuthenticated = checkUserAuth();
-    console.log('User authenticated for profile:', isAuthenticated);
-    
-    // TEMPORARY: Allow access even without auth for debugging
     if (!isAuthenticated) {
-      console.log('User not authenticated for profile - showing login prompt');
-      // For now, let's just warn but don't redirect
-      console.warn('⚠️ User not authenticated for profile but allowing access for debugging');
-      // Uncomment the lines below to re-enable auth protection:
-      /*
       throw redirect({
         to: '/',
         search: {
           redirect: location.pathname,
         },
       });
-      */
     }
-    console.log('Proceeding to profile page');
   },
   component: Profile
 });
@@ -166,6 +163,17 @@ const allProductsRoute = createRoute({
 const cartRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/cart',
+  beforeLoad: ({ location }) => {
+    const isAuthenticated = checkUserAuth();
+    if (!isAuthenticated) {
+      throw redirect({
+        to: '/',
+        search: {
+          redirect: location.pathname,
+        },
+      });
+    }
+  },
   component: Cart
 });
 
@@ -173,28 +181,15 @@ const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard',
   beforeLoad: ({ location }) => {
-    console.log('Dashboard route beforeLoad triggered');
-    console.log('Current location:', location);
-    
     const isAdminAuthenticated = checkAdminAuth();
-    console.log('Admin authenticated for dashboard:', isAdminAuthenticated);
-    
-    // TEMPORARY: Allow access even without admin auth for debugging
     if (!isAdminAuthenticated) {
-      console.log('Admin not authenticated for dashboard - showing login prompt');
-      // For now, let's just warn but don't redirect
-      console.warn('⚠️ Admin not authenticated for dashboard but allowing access for debugging');
-      // Uncomment the lines below to re-enable admin auth protection:
-      /*
       throw redirect({
         to: '/',
         search: {
           redirect: location.pathname,
         },
       });
-      */
     }
-    console.log('Proceeding to dashboard page');
   },
   component: Dashboard
 });
@@ -208,12 +203,34 @@ const productInfoRoute = createRoute({
 const updateProductRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/updateproduct/$id',
+  beforeLoad: ({ location }) => {
+    const isAdminAuthenticated = checkAdminAuth();
+    if (!isAdminAuthenticated) {
+      throw redirect({
+        to: '/',
+        search: {
+          redirect: location.pathname,
+        },
+      });
+    }
+  },
   component: UpdateProduct
 });
 
 const addProductRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/addproduct',
+  beforeLoad: ({ location }) => {
+    const isAdminAuthenticated = checkAdminAuth();
+    if (!isAdminAuthenticated) {
+      throw redirect({
+        to: '/',
+        search: {
+          redirect: location.pathname,
+        },
+      });
+    }
+  },
   component: AddProduct
 });
 

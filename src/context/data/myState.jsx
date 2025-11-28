@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import MyContext from './myContext';
-import { fireDB as fireDb } from '../../firebase/FirebaseConfig';
+import { fireDB as fireDb, auth } from '../../firebase/FirebaseConfig';
 import { Timestamp, addDoc, collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { toast } from 'react-toastify';
 import { doc, deleteDoc, setDoc, getDocs, updateDoc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged } from 'firebase/auth';
 
 
 
@@ -131,6 +132,25 @@ function MyState(props) {
   const [order, setOrder] = useState([]);
 
   const getOrderData = () => {
+    // Check if user is authenticated before fetching orders
+    const userString = localStorage.getItem('user');
+    if (!userString) {
+      setOrder([]);
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userString);
+      if (!user || !user.user || !user.user.uid) {
+        setOrder([]);
+        return;
+      }
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+      setOrder([]);
+      return;
+    }
+
     const q = query(collection(fireDb, "orders"));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const ordersArray = [];
@@ -152,6 +172,37 @@ function MyState(props) {
   const [user, setUser] = useState([]);
 
   const getUserData = async () => {
+    // Check if user is authenticated and is admin before fetching user data
+    const userString = localStorage.getItem('user');
+    if (!userString) {
+      setUser([]);
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userString);
+      if (!user || !user.user || !user.user.uid) {
+        setUser([]);
+        return;
+      }
+
+      // Check if user is admin
+      const userRole = localStorage.getItem('userRole');
+      const isAdmin = user.user.email === 'omprakash16003@gmail.com' || 
+                     userRole === 'master_admin' || 
+                     userRole === 'sub_admin' || 
+                     userRole === 'delivery_boy';
+      
+      if (!isAdmin) {
+        setUser([]);
+        return;
+      }
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+      setUser([]);
+      return;
+    }
+
     setLoading(true)
     try {
       const result = await getDocs(collection(fireDb, "users"))
@@ -469,9 +520,51 @@ function MyState(props) {
   }, []);
 
   useEffect(() => {
+    // Always fetch products (public data)
     getProductData();
-    getOrderData();
-    getUserData();
+    
+    // Only fetch sensitive data if user is authenticated
+    const checkAuthAndFetchData = () => {
+      const userString = localStorage.getItem('user');
+      if (userString) {
+        try {
+          const user = JSON.parse(userString);
+          if (user && user.user && user.user.uid) {
+            getOrderData();
+            getUserData();
+          }
+        } catch (error) {
+          console.error('Error checking auth:', error);
+        }
+      }
+    };
+
+    // Check auth state on mount
+    checkAuthAndFetchData();
+
+    // Listen for auth state changes
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        checkAuthAndFetchData();
+      } else {
+        // Clear sensitive data when user logs out
+        setOrder([]);
+        setUser([]);
+      }
+    });
+
+    // Listen for localStorage changes (when user logs in/out)
+    const handleStorageChange = () => {
+      checkAuthAndFetchData();
+    };
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userChanged', handleStorageChange);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userChanged', handleStorageChange);
+    };
   }, []);
   const [searchkey, setSearchkey] = useState('')
 

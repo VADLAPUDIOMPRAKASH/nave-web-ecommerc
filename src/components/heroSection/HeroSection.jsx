@@ -113,6 +113,17 @@ function HeroSection() {
           )}
             </div>
           </motion.div>
+      {/* Scrolling Notice Banner */}
+      <div className="absolute bottom-0 left-0 right-0 bg-white/95 text-black py-2 sm:py-2.5 z-20 shadow-md flex items-center">
+        <div className="bg-red-600 text-white px-3 sm:px-4 py-1 sm:py-1.5 font-bold text-xs sm:text-sm whitespace-nowrap flex-shrink-0 z-30">
+          IMPORTANT
+        </div>
+        <div className="scrolling-text-container flex-1 overflow-hidden">
+          <div className="scrolling-text text-xs sm:text-sm font-medium px-4 text-black">
+            Please note: Vegetable and leafy green prices are calculated using yesterday's market rates. Final prices on the delivery date may differ due to daily market changes. • Please note: Vegetable and leafy green prices are calculated using yesterday's market rates. Final prices on the delivery date may differ due to daily market changes. • Please note: Vegetable and leafy green prices are calculated using yesterday's market rates. Final prices on the delivery date may differ due to daily market changes.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

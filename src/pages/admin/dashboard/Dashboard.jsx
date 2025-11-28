@@ -18,7 +18,8 @@ import {
   X,
   Home,
   Shield,
-  ArrowLeft
+  ArrowLeft,
+  FileText
 } from 'lucide-react';
 import myContext from '../../../context/data/myContext';
 import { fireDB } from '../../../firebase/FirebaseConfig';
@@ -29,6 +30,7 @@ import DeliveryDashboard from '../delivery/DeliveryDashboard';
 import AdminManagement from '../../../components/AdminManagement';
 import Inventory from './components/Inventory';
 import Orders from './components/Orders';
+import Invoice from './components/Invoice';
 function Dashboard() {
     const context = useContext(myContext);
     const { mode } = context;
@@ -142,6 +144,7 @@ function Dashboard() {
         { id: 'settings', label: 'Settings', icon: Settings },
         { id: 'inventory', label: 'Inventory', icon: Package },
         { id: 'delivery', label: 'Delivery Dashboard', icon: MapPin },
+        { id: 'invoice', label: 'Invoices', icon: FileText },
             // Admin management only for master and sub admins
             ...(userRole === 'master_admin' || userRole === 'sub_admin' ? [{ id: 'admin_management', label: 'Admin Management', icon: Shield }] : []),
         { id: 'addproduct', label: 'Add Product', icon: Plus },
@@ -176,6 +179,8 @@ function Dashboard() {
                 return <UpdateBanners />;
             case 'admin_management':
                 return <AdminManagement />;
+            case 'invoice':
+                return <Invoice />;
             default:
                 return <DashboardTab activeTab={activeTab} setActiveTab={setActiveTab} />;
         }
