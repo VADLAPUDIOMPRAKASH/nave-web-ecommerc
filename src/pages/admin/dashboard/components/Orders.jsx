@@ -15,7 +15,7 @@ const Orders = () => {
     const [cancelReason, setCancelReason] = useState('');
     const [cancelLoading, setCancelLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('all'); // ['all', 'vegetables', 'leafy', 'analytics']
-    const [dateFilter, setDateFilter] = useState('all'); // ['all', 'today', 'week', 'month']
+    const [dateFilter, setDateFilter] = useState('today'); // ['all', 'today', 'week', 'month']
     const [viewInvoiceId, setViewInvoiceId] = useState(null);
     const [deliveryCharges] = useState(30); // Default delivery charges
 
@@ -171,6 +171,9 @@ const Orders = () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
         const weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
         
@@ -191,15 +194,20 @@ const Orders = () => {
                 return false;
             }
 
-            console.log('Order date:', { raw: item.date, timestamp: item.timestamp, parsed: orderDate });
+            // Reset time to start of day for accurate date comparison
+            const orderDateOnly = new Date(orderDate);
+            orderDateOnly.setHours(0, 0, 0, 0);
+
+            console.log('Order date:', { raw: item.date, timestamp: item.timestamp, parsed: orderDate, dateOnly: orderDateOnly });
             
             switch(dateFilter) {
                 case 'today':
-                    return orderDate >= today;
+                    // Show only orders from today (between today 00:00:00 and tomorrow 00:00:00)
+                    return orderDateOnly >= today && orderDateOnly < tomorrow;
                 case 'week':
-                    return orderDate >= weekAgo;
+                    return orderDateOnly >= weekAgo;
                 case 'month':
-                    return orderDate >= monthAgo;
+                    return orderDateOnly >= monthAgo;
                 default:
                     return true;
             }

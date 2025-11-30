@@ -11,7 +11,9 @@ import {
     Printer,
     Filter,
     X,
-    ChevronDown
+    ChevronDown,
+    ArrowUp,
+    ArrowDown
 } from 'lucide-react';
 import { fireDB } from '../../../../firebase/FirebaseConfig';
 import { toast } from 'react-toastify';
@@ -29,6 +31,12 @@ function Inventory() {
     const [activeTab, setActiveTab] = useState('orderData');
     const [productStats, setProductStats] = useState([]);
     
+    // Column sorting state for Order Data table
+    const [orderTableSort, setOrderTableSort] = useState({ column: null, order: 'asc' });
+    
+    // Column sorting state for Product List table
+    const [productTableSort, setProductTableSort] = useState({ column: null, order: 'asc' });
+    
     // Excel-like filter states
     const [showFilters, setShowFilters] = useState(false);
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -37,6 +45,10 @@ function Inventory() {
     const [priceRange, setPriceRange] = useState({ min: '', max: '' });
     const [selectedCustomers, setSelectedCustomers] = useState([]);
     const [selectedStatuses, setSelectedStatuses] = useState([]);
+    
+    // Product list date filter (default to today)
+    const [productListDateFilter, setProductListDateFilter] = useState('today'); // 'today', 'all', 'custom'
+    const [productListDateRange, setProductListDateRange] = useState({ start: '', end: '' });
 
     // Format date
     const formatDate = (timestamp) => {
@@ -51,36 +63,81 @@ function Inventory() {
         });
     };
 
+    // Filter orders by date for product list
+    const filterOrdersForProductList = (ordersData) => {
+        let filteredOrders = ordersData.filter(order => order.status !== 'cancelled');
+        
+        if (productListDateFilter === 'today') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            filteredOrders = filteredOrders.filter(order => {
+                const orderDate = order.timestamp?.toDate ? order.timestamp.toDate() : new Date(order.date || order.timestamp);
+                const orderDateOnly = new Date(orderDate);
+                orderDateOnly.setHours(0, 0, 0, 0);
+                return orderDateOnly >= today && orderDateOnly < tomorrow;
+            });
+        } else if (productListDateFilter === 'yesterday') {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setHours(0, 0, 0, 0);
+            const today = new Date(yesterday);
+            today.setDate(today.getDate() + 1);
+            
+            filteredOrders = filteredOrders.filter(order => {
+                const orderDate = order.timestamp?.toDate ? order.timestamp.toDate() : new Date(order.date || order.timestamp);
+                const orderDateOnly = new Date(orderDate);
+                orderDateOnly.setHours(0, 0, 0, 0);
+                return orderDateOnly >= yesterday && orderDateOnly < today;
+            });
+        } else if (productListDateFilter === 'custom' && (productListDateRange.start || productListDateRange.end)) {
+            filteredOrders = filteredOrders.filter(order => {
+                const orderDate = order.timestamp?.toDate ? order.timestamp.toDate() : new Date(order.date || order.timestamp);
+                const orderDateStr = orderDate.toISOString().split('T')[0];
+                
+                if (productListDateRange.start && orderDateStr < productListDateRange.start) return false;
+                if (productListDateRange.end && orderDateStr > productListDateRange.end) return false;
+                return true;
+            });
+        }
+        // If 'all', no date filtering is applied
+        
+        return filteredOrders;
+    };
+
     // Calculate product statistics (excluding cancelled orders)
     const calculateProductStats = (ordersData) => {
         const stats = new Map();
+        
+        // Filter orders by date first
+        const filteredOrders = filterOrdersForProductList(ordersData);
 
-        ordersData
-            .filter(order => order.status !== 'cancelled')
-            .forEach(order => {
-                order.cartItems?.forEach(item => {
-                    const key = `${item.title || item.name}-${item.category || 'vegetables'}`;
-                    if (!stats.has(key)) {
-                        stats.set(key, {
-                            name: item.title || item.name,
-                            category: item.category || 'vegetables',
-                            totalQuantity: 0,
-                            totalOrders: 0,
-                            totalRevenue: 0,
-                            lastOrdered: null
-                        });
-                    }
-                    const stat = stats.get(key);
-                    stat.totalQuantity += Number(item.quantity || 0);
-                    stat.totalOrders += 1;
-                    stat.totalRevenue += Number(item.quantity || 0) * Number(item.price || 0);
-                    
-                    const orderDate = order.timestamp?.toDate?.() || new Date(order.date || order.timestamp);
-                    if (!stat.lastOrdered || orderDate > stat.lastOrdered) {
-                        stat.lastOrdered = orderDate;
-                    }
-                });
+        filteredOrders.forEach(order => {
+            order.cartItems?.forEach(item => {
+                const key = `${item.title || item.name}-${item.category || 'vegetables'}`;
+                if (!stats.has(key)) {
+                    stats.set(key, {
+                        name: item.title || item.name,
+                        category: item.category || 'vegetables',
+                        totalQuantity: 0,
+                        totalOrders: 0,
+                        totalRevenue: 0,
+                        lastOrdered: null
+                    });
+                }
+                const stat = stats.get(key);
+                stat.totalQuantity += Number(item.quantity || 0);
+                stat.totalOrders += 1;
+                stat.totalRevenue += Number(item.quantity || 0) * Number(item.price || 0);
+                
+                const orderDate = order.timestamp?.toDate?.() || new Date(order.date || order.timestamp);
+                if (!stat.lastOrdered || orderDate > stat.lastOrdered) {
+                    stat.lastOrdered = orderDate;
+                }
             });
+        });
 
         setProductStats(Array.from(stats.values()));
     };
@@ -89,7 +146,7 @@ function Inventory() {
         if (order && order.length > 0) {
             calculateProductStats(order);
         }
-    }, [order]);
+    }, [order, productListDateFilter, productListDateRange]);
 
     // Get unique customers and statuses for filters
     const getUniqueCustomers = () => {
@@ -215,7 +272,7 @@ function Inventory() {
         return filteredOrders;
     };
 
-    // Get filtered product stats
+    // Get filtered product stats with column sorting
     const getFilteredProductStats = () => {
         const categoryFiltered = productStats.filter(product => {
             if (selectedCategory === 'all') return true;
@@ -234,7 +291,78 @@ function Inventory() {
             return (product.name || '').toLowerCase().includes(query);
         });
         
-        return searchFiltered.sort((a, b) => b.totalQuantity - a.totalQuantity);
+        // Apply column sorting
+        if (productTableSort.column) {
+            searchFiltered.sort((a, b) => {
+                let comparison = 0;
+                switch (productTableSort.column) {
+                    case 'name':
+                        comparison = (a.name || '').localeCompare(b.name || '');
+                        break;
+                    case 'category':
+                        comparison = (a.category || '').localeCompare(b.category || '');
+                        break;
+                    case 'quantity':
+                        comparison = (a.totalQuantity || 0) - (b.totalQuantity || 0);
+                        break;
+                    case 'orders':
+                        comparison = (a.totalOrders || 0) - (b.totalOrders || 0);
+                        break;
+                    case 'revenue':
+                        comparison = (a.totalRevenue || 0) - (b.totalRevenue || 0);
+                        break;
+                    case 'lastOrdered':
+                        const dateA = a.lastOrdered ? (a.lastOrdered.toDate ? a.lastOrdered.toDate() : new Date(a.lastOrdered)) : new Date(0);
+                        const dateB = b.lastOrdered ? (b.lastOrdered.toDate ? b.lastOrdered.toDate() : new Date(b.lastOrdered)) : new Date(0);
+                        comparison = dateA - dateB;
+                        break;
+                    default:
+                        comparison = (b.totalQuantity || 0) - (a.totalQuantity || 0);
+                }
+                return productTableSort.order === 'asc' ? comparison : -comparison;
+            });
+        } else {
+            // Default sort by quantity descending
+            searchFiltered.sort((a, b) => b.totalQuantity - a.totalQuantity);
+        }
+        
+        return searchFiltered;
+    };
+    
+    // Handle product table column sort
+    const handleProductTableSort = (column) => {
+        if (productTableSort.column === column) {
+            // Toggle order if same column
+            setProductTableSort({
+                column,
+                order: productTableSort.order === 'asc' ? 'desc' : 'asc'
+            });
+        } else {
+            // New column, default to ascending
+            setProductTableSort({ column, order: 'asc' });
+        }
+    };
+    
+    // Handle order table column sort
+    const handleOrderTableSort = (column) => {
+        if (orderTableSort.column === column) {
+            setOrderTableSort({
+                column,
+                order: orderTableSort.order === 'asc' ? 'desc' : 'asc'
+            });
+        } else {
+            setOrderTableSort({ column, order: 'asc' });
+        }
+    };
+    
+    // Sort icon component
+    const SortIcon = ({ column, currentSort }) => {
+        if (currentSort.column !== column) {
+            return <ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />;
+        }
+        return currentSort.order === 'asc' 
+            ? <ArrowUp className="w-4 h-4 ml-1 text-blue-600" />
+            : <ArrowDown className="w-4 h-4 ml-1 text-blue-600" />;
     };
 
     // Download functions
@@ -522,6 +650,65 @@ function Inventory() {
 
             {/* Content Area */}
             <div className="bg-white rounded-2xl shadow-xl p-6">
+            {/* Product List Date Filter (only show in productList tab) */}
+            {activeTab === 'productList' && (
+                <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-4 flex-wrap">
+                        <label className="text-sm font-medium text-gray-700">Filter by Date:</label>
+                        <select
+                            value={productListDateFilter}
+                            onChange={(e) => {
+                                setProductListDateFilter(e.target.value);
+                                if (e.target.value !== 'custom') {
+                                    setProductListDateRange({ start: '', end: '' });
+                                }
+                            }}
+                            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                            <option value="today">Today Only</option>
+                            <option value="yesterday">Yesterday Only</option>
+                            <option value="all">All Orders</option>
+                            <option value="custom">Custom Date Range</option>
+                        </select>
+                        
+                        {productListDateFilter === 'custom' && (
+                            <div className="flex gap-2 items-center">
+                                <input
+                                    type="date"
+                                    value={productListDateRange.start}
+                                    onChange={(e) => setProductListDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                    placeholder="Start Date"
+                                />
+                                <span className="text-gray-500">to</span>
+                                <input
+                                    type="date"
+                                    value={productListDateRange.end}
+                                    onChange={(e) => setProductListDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                                    placeholder="End Date"
+                                />
+                            </div>
+                        )}
+                        
+                        {productListDateFilter === 'today' && (
+                            <span className="text-sm text-blue-700 font-medium">
+                                Showing orders from: {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
+                        )}
+                        {productListDateFilter === 'yesterday' && (
+                            <span className="text-sm text-blue-700 font-medium">
+                                Showing orders from: {(() => {
+                                    const yesterday = new Date();
+                                    yesterday.setDate(yesterday.getDate() - 1);
+                                    return yesterday.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                                })()}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
+            
             {/* Category Tabs */}
             <div className="flex gap-4 mb-6">
                     <button
@@ -786,12 +973,60 @@ function Inventory() {
                             <table className="w-full">
                                 <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Order ID</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Customer Name</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Product Name</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Category</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Quantity</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Date</th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleOrderTableSort('orderId')}
+                                    >
+                                        <div className="flex items-center">
+                                            Order ID
+                                            <SortIcon column="orderId" currentSort={orderTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleOrderTableSort('customerName')}
+                                    >
+                                        <div className="flex items-center">
+                                            Customer Name
+                                            <SortIcon column="customerName" currentSort={orderTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleOrderTableSort('productName')}
+                                    >
+                                        <div className="flex items-center">
+                                            Product Name
+                                            <SortIcon column="productName" currentSort={orderTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleOrderTableSort('category')}
+                                    >
+                                        <div className="flex items-center">
+                                            Category
+                                            <SortIcon column="category" currentSort={orderTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleOrderTableSort('quantity')}
+                                    >
+                                        <div className="flex items-center">
+                                            Quantity
+                                            <SortIcon column="quantity" currentSort={orderTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleOrderTableSort('date')}
+                                    >
+                                        <div className="flex items-center">
+                                            Date
+                                            <SortIcon column="date" currentSort={orderTableSort} />
+                                        </div>
+                                    </th>
                                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Order Count</th>
                                     </tr>
                                 </thead>
@@ -831,11 +1066,47 @@ function Inventory() {
                                                     item,
                                                     itemIndex,
                                                     orderCount: group.orderCount,
-                                                    isFirstInGroup: itemIndex === 0 && group.orders.indexOf(order) === 0
+                                                    isFirstInGroup: itemIndex === 0 && group.orders.indexOf(order) === 0,
+                                                    orderId: order.orderId ? `#${order.orderId}` : order.id ? `#${order.id.slice(-8)}` : 'N/A',
+                                                    customerName: order.addressInfo?.name || order.name || 'N/A',
+                                                    productName: item.title || item.name || '',
+                                                    category: item.category || 'vegetables',
+                                                    quantity: Number(item.quantity || 0),
+                                                    date: order.timestamp?.toDate ? order.timestamp.toDate() : new Date(order.date || order.timestamp)
                                                 });
                                             });
                                         });
                                     });
+                                    
+                                    // Apply column sorting if active
+                                    if (orderTableSort.column) {
+                                        flattenedOrders.sort((a, b) => {
+                                            let comparison = 0;
+                                            switch (orderTableSort.column) {
+                                                case 'orderId':
+                                                    comparison = (a.orderId || '').localeCompare(b.orderId || '');
+                                                    break;
+                                                case 'customerName':
+                                                    comparison = a.customerName.localeCompare(b.customerName);
+                                                    break;
+                                                case 'productName':
+                                                    comparison = a.productName.localeCompare(b.productName);
+                                                    break;
+                                                case 'category':
+                                                    comparison = a.category.localeCompare(b.category);
+                                                    break;
+                                                case 'quantity':
+                                                    comparison = a.quantity - b.quantity;
+                                                    break;
+                                                case 'date':
+                                                    comparison = a.date - b.date;
+                                                    break;
+                                                default:
+                                                    comparison = 0;
+                                            }
+                                            return orderTableSort.order === 'asc' ? comparison : -comparison;
+                                        });
+                                    }
                                     
                                     return flattenedOrders.map(({ order, item, itemIndex, orderCount, isFirstInGroup }, index) => (
                                         <tr 
@@ -890,12 +1161,60 @@ function Inventory() {
                         <table className="w-full">
                             <thead>
                                 <tr className="bg-gray-50">
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Product Name</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Category</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Total Quantity</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Total Orders</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Total Revenue</th>
-                                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Last Ordered</th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleProductTableSort('name')}
+                                    >
+                                        <div className="flex items-center">
+                                            Product Name
+                                            <SortIcon column="name" currentSort={productTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleProductTableSort('category')}
+                                    >
+                                        <div className="flex items-center">
+                                            Category
+                                            <SortIcon column="category" currentSort={productTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleProductTableSort('quantity')}
+                                    >
+                                        <div className="flex items-center">
+                                            Total Quantity
+                                            <SortIcon column="quantity" currentSort={productTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleProductTableSort('orders')}
+                                    >
+                                        <div className="flex items-center">
+                                            Total Orders
+                                            <SortIcon column="orders" currentSort={productTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleProductTableSort('revenue')}
+                                    >
+                                        <div className="flex items-center">
+                                            Total Revenue
+                                            <SortIcon column="revenue" currentSort={productTableSort} />
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-4 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none"
+                                        onClick={() => handleProductTableSort('lastOrdered')}
+                                    >
+                                        <div className="flex items-center">
+                                            Last Ordered
+                                            <SortIcon column="lastOrdered" currentSort={productTableSort} />
+                                        </div>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">

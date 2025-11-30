@@ -67,11 +67,12 @@ function Dashboard() {
     // Check screen size on mount and resize
     useEffect(() => {
         const checkScreenSize = () => {
-            setIsMobile(window.innerWidth < 1024); // lg breakpoint
-            if (window.innerWidth >= 1024) {
+            const width = window.innerWidth;
+            setIsMobile(width < 1024); // lg breakpoint
+            if (width >= 1024) {
                 setSidebarOpen(true); // Auto-open on desktop
             } else {
-                setSidebarOpen(false); // Auto-close on mobile
+                setSidebarOpen(false); // Auto-close on mobile/tablet
             }
         };
 
@@ -194,37 +195,41 @@ function Dashboard() {
             {/* Mobile Overlay */}
             {isMobile && sidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+                    className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden touch-none"
                     onClick={closeSidebar}
+                    onTouchStart={closeSidebar}
+                    aria-label="Close sidebar overlay"
                 />
             )}
 
-            {/* Sidebar - Hidden on mobile for delivery boys */}
+            {/* Sidebar - Responsive */}
             <div className={`
                 fixed top-0 left-0 h-screen bg-gradient-to-br from-blue-700 via-blue-600 to-blue-800 shadow-2xl 
                 border-r-4 border-blue-300 z-50 transition-all duration-300 ease-in-out
                 ${userRole === 'delivery_boy' && isMobile ? 'hidden' : ''}
                 ${sidebarOpen 
-                    ? 'w-64 lg:w-64' 
+                    ? 'w-64 sm:w-72 lg:w-64' 
                     : 'w-0 lg:w-20'
                 }
                 ${isMobile && !sidebarOpen ? '-translate-x-full' : 'translate-x-0'}
                 lg:translate-x-0
+                overflow-hidden
             `}>
                 <div className="flex flex-col h-full">
                     {/* Mobile Header */}
-                    <div className="lg:hidden flex items-center justify-between p-4 border-b border-blue-500">
-                        <div className="flex items-center gap-2">
-                            <img src="/logo.png" alt="NaveDhana Logo" className="w-8 h-8 rounded-lg shadow border border-white" />
-                        <h1 className="text-sm font-semibold text-white tracking-wide drop-shadow">
+                    <div className="lg:hidden flex items-center justify-between p-3 sm:p-4 border-b border-blue-500">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <img src="/logo.png" alt="NaveDhana Logo" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow border border-white flex-shrink-0" />
+                        <h1 className="text-sm sm:text-base font-semibold text-white tracking-wide drop-shadow truncate">
                             {userRole === 'delivery_boy' ? 'NaveDhana Delivery' : 'NaveDhana Admin'}
                         </h1>
                         </div>
                     <button
                             onClick={closeSidebar}
-                            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors"
+                            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors flex-shrink-0 touch-manipulation"
+                            aria-label="Close sidebar"
                     >
-                            <X className="w-5 h-5 text-white" />
+                            <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                     </button>
                     </div>
 
@@ -241,7 +246,7 @@ function Dashboard() {
                     </div>
 
                     {/* Navigation */}
-                    <nav className={`flex-1 p-4 space-y-2 overflow-y-auto ${sidebarOpen ? '' : 'lg:flex lg:flex-col lg:items-center'}`}>
+                    <nav className={`flex-1 p-3 sm:p-4 space-y-2 overflow-y-auto overscroll-contain ${sidebarOpen ? '' : 'lg:flex lg:flex-col lg:items-center'}`} style={{ WebkitOverflowScrolling: 'touch' }}>
                         {/* Main Navigation Items */}
                         {menuItems.map((item, idx) => {
                             if (item.id === 'addproduct' || item.id === 'banners') return null;
@@ -254,29 +259,29 @@ function Dashboard() {
                                         closeSidebar(); // Close sidebar on mobile after selection
                                     }}
                                     className={`
-                                        flex items-center transition-all text-sm font-medium gap-3 shadow-sm
+                                        flex items-center transition-all text-sm font-medium gap-3 shadow-sm touch-manipulation
                                         ${sidebarOpen 
-                                            ? 'w-full px-4 py-3' 
+                                            ? 'w-full px-3 sm:px-4 py-2.5 sm:py-3' 
                                             : 'lg:justify-center lg:w-12 lg:h-12 lg:my-2'
                                         } 
                                         rounded-xl
                                         ${activeTab === item.id
-                                            ? 'bg-white text-blue-700 shadow-lg border-l-8 border-blue-400 ring-2 ring-blue-200'
-                                            : 'text-white hover:bg-blue-500 hover:shadow-md hover:border-l-8 hover:border-blue-300'
+                                            ? 'bg-white text-blue-700 shadow-lg border-l-4 sm:border-l-8 border-blue-400 ring-2 ring-blue-200'
+                                            : 'text-white hover:bg-blue-500 hover:shadow-md hover:border-l-4 sm:hover:border-l-8 hover:border-blue-300 active:bg-blue-600'
                                         }
                                     `}
                                     title={!sidebarOpen ? item.label : ''}
-                                    style={{ minHeight: 48 }}
+                                    style={{ minHeight: 44 }}
                                 >
-                                    <Icon className="w-6 h-6" />
-                                    {sidebarOpen && <span className="ml-2 text-xs font-semibold">{item.label}</span>}
+                                    <Icon className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                                    {sidebarOpen && <span className="ml-2 text-xs sm:text-sm font-semibold truncate">{item.label}</span>}
                                 </button>
                             );
                         })}
 
                         {/* Actions Section Header */}
                         {sidebarOpen && (
-                            <div className="px-6 pt-6 pb-2 text-xs font-bold text-blue-200 tracking-widest uppercase">
+                            <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2 text-xs font-bold text-blue-200 tracking-widest uppercase">
                                 Actions
                             </div>
                         )}
@@ -292,45 +297,45 @@ function Dashboard() {
                                         closeSidebar();
                                     }}
                                     className={`
-                                        flex items-center transition-all text-sm font-medium gap-3 shadow-sm
+                                        flex items-center transition-all text-sm font-medium gap-3 shadow-sm touch-manipulation
                                         ${sidebarOpen 
-                                            ? 'w-full px-4 py-3' 
+                                            ? 'w-full px-3 sm:px-4 py-2.5 sm:py-3' 
                                             : 'lg:justify-center lg:w-12 lg:h-12 lg:my-2'
                                         } 
                                         rounded-xl
                                         ${activeTab === item.id
-                                            ? 'bg-white text-blue-700 shadow-lg border-l-8 border-blue-400 ring-2 ring-blue-200'
-                                            : 'text-white hover:bg-blue-500 hover:shadow-md hover:border-l-8 hover:border-blue-300'
+                                            ? 'bg-white text-blue-700 shadow-lg border-l-4 sm:border-l-8 border-blue-400 ring-2 ring-blue-200'
+                                            : 'text-white hover:bg-blue-500 hover:shadow-md hover:border-l-4 sm:hover:border-l-8 hover:border-blue-300 active:bg-blue-600'
                                         }
                                     `}
                                     title={!sidebarOpen ? item.label : ''}
-                                    style={{ minHeight: 48 }}
+                                    style={{ minHeight: 44 }}
                                 >
-                                    <Icon className="w-6 h-6" />
-                                    {sidebarOpen && <span className="ml-2 text-xs font-semibold">{item.label}</span>}
+                                    <Icon className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                                    {sidebarOpen && <span className="ml-2 text-xs sm:text-sm font-semibold truncate">{item.label}</span>}
                                 </button>
                             );
                         })}
 
                         {/* Separator */}
-                        <div className={`border-t border-blue-500 my-4 ${sidebarOpen ? 'mx-4' : 'lg:w-8'}`}></div>
+                        <div className={`border-t border-blue-500 my-3 sm:my-4 ${sidebarOpen ? 'mx-3 sm:mx-4' : 'lg:w-8'}`}></div>
 
                         {/* Logout Button */}
                         <button
                             onClick={handleLogout}
                             className={`
-                                flex items-center transition-all text-sm font-medium gap-3 shadow-sm text-white hover:bg-red-500
+                                flex items-center transition-all text-sm font-medium gap-3 shadow-sm text-white hover:bg-red-500 active:bg-red-600 touch-manipulation
                                 ${sidebarOpen 
-                                    ? 'w-full px-4 py-3' 
+                                    ? 'w-full px-3 sm:px-4 py-2.5 sm:py-3' 
                                     : 'lg:justify-center lg:w-12 lg:h-12 lg:my-2'
                                 } 
                                 rounded-xl
                             `}
                             title={!sidebarOpen ? 'Logout' : ''}
-                            style={{ minHeight: 48 }}
+                            style={{ minHeight: 44 }}
                         >
-                            <LogOut className="w-6 h-6" />
-                            {sidebarOpen && <span className="ml-2 text-xs font-semibold">Logout</span>}
+                            <LogOut className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                            {sidebarOpen && <span className="ml-2 text-xs sm:text-sm font-semibold">Logout</span>}
                         </button>
                     </nav>
                 </div>
@@ -345,27 +350,29 @@ function Dashboard() {
                     ? 'lg:ml-64' 
                     : 'lg:ml-20'
                 }
+                w-full
             `}>
                 {/* Mobile Header */}
-                <div className="lg:hidden bg-white shadow-sm border-b border-gray-200">
+                <div className="lg:hidden bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
                     {userRole === 'delivery_boy' ? (
                         // Delivery Boy Mobile Header
-                        <div className="p-3">
+                        <div className="p-3 sm:p-4">
                             <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <img src="/logo.png" alt="NaveDhana Logo" className="w-8 h-8 rounded-lg shadow" />
-                                    <h1 className="text-base font-semibold text-gray-900">NaveDhana Delivery</h1>
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <img src="/logo.png" alt="NaveDhana Logo" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow flex-shrink-0" />
+                                    <h1 className="text-base sm:text-lg font-semibold text-gray-900 truncate">NaveDhana Delivery</h1>
                                 </div>
                                 <button
                                     onClick={handleLogout}
-                                    className="p-2 rounded-lg bg-red-100 hover:bg-red-200 transition-colors"
+                                    className="p-2 rounded-lg bg-red-100 hover:bg-red-200 active:bg-red-300 transition-colors touch-manipulation flex-shrink-0"
                                     title="Logout"
+                                    aria-label="Logout"
                                 >
-                                    <LogOut className="w-4 h-4 text-red-600" />
+                                    <LogOut className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
                                 </button>
                             </div>
                             {/* Mobile Tab Navigation for Delivery Boy */}
-                            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg overflow-x-auto">
                                 {menuItems.map((item) => {
                                     const Icon = item.icon;
                                     return (
@@ -373,15 +380,15 @@ function Dashboard() {
                                             key={item.id}
                                             onClick={() => setActiveTab(item.id)}
                                             className={`
-                                                flex-1 flex flex-col items-center gap-1 py-2 px-1 rounded-md transition-all
+                                                flex-1 flex flex-col items-center gap-1 py-2 px-1 rounded-md transition-all touch-manipulation min-w-0
                                                 ${activeTab === item.id
                                                     ? 'bg-blue-600 text-white shadow-sm'
-                                                    : 'text-gray-600 hover:bg-gray-200'
+                                                    : 'text-gray-600 hover:bg-gray-200 active:bg-gray-300'
                                                 }
                                             `}
                                         >
-                                            <Icon className="w-5 h-5" />
-                                            <span className="text-xs font-medium leading-none">{item.label.split(' ')[0]}</span>
+                                            <Icon className="w-5 h-5 flex-shrink-0" />
+                                            <span className="text-xs font-medium leading-none truncate w-full text-center">{item.label.split(' ')[0]}</span>
                                         </button>
                                     );
                                 })}
@@ -389,26 +396,28 @@ function Dashboard() {
                         </div>
                     ) : (
                         // Admin Mobile Header
-                        <div className="p-4">
+                        <div className="p-3 sm:p-4">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                             <button
                                 onClick={() => setSidebarOpen(true)}
-                                className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors"
+                                className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation flex-shrink-0"
+                                aria-label="Open menu"
                             >
-                                <Menu className="w-5 h-5 text-white" />
+                                <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                             </button>
-                            <div className="flex items-center gap-2">
-                                <img src="/logo.png" alt="NaveDhana Logo" className="w-8 h-8 rounded-lg shadow" />
-                                <h1 className="text-lg font-semibold text-gray-900">NaveDhana Admin</h1>
+                            <div className="flex items-center gap-2 min-w-0">
+                                <img src="/logo.png" alt="NaveDhana Logo" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shadow flex-shrink-0" />
+                                <h1 className="text-base sm:text-lg font-semibold text-gray-900 truncate">NaveDhana Admin</h1>
                             </div>
                         </div>
                         <button
                             onClick={() => navigate({ to: '/' })}
-                            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition-colors touch-manipulation flex-shrink-0"
                             title="Go to Home"
+                            aria-label="Go to Home"
                         >
-                            <Home className="w-5 h-5 text-gray-600" />
+                            <Home className="w-5 h-5 sm:w-6 sm:h-6 text-gray-600" />
                         </button>
                     </div>
                         </div>
@@ -419,14 +428,14 @@ function Dashboard() {
                 <div className="hidden lg:block">
                     <button
                         className={`
-                            fixed z-40 left-0 top-6 bg-blue-700 border-2 border-blue-400 rounded-full p-1 shadow-lg 
-                            transition-all duration-300 hover:bg-blue-600
+                            fixed z-40 left-0 top-6 bg-blue-700 border-2 border-blue-400 rounded-full p-1.5 sm:p-2 shadow-lg 
+                            transition-all duration-300 hover:bg-blue-600 active:bg-blue-800 cursor-pointer
                             ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'}
                         `}
                         onClick={() => setSidebarOpen((prev) => !prev)}
                         aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
                     >
-                        {sidebarOpen ? <ChevronLeft className="w-5 h-5 text-white" /> : <ChevronRight className="w-5 h-5 text-white" />}
+                        {sidebarOpen ? <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
                     </button>
                 </div>
 

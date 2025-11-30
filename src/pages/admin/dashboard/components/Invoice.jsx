@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { FileText, Plus, Save, Eye, Trash2, Download, Printer, Search, Calendar, User, MapPin, Phone, Mail, Building } from 'lucide-react';
-import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { FileText, Plus, Save, Eye, Trash2, Download, Printer, Search, Calendar, User, MapPin, Phone, Mail, Building, Edit } from 'lucide-react';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, Timestamp, updateDoc } from 'firebase/firestore';
 import { fireDB } from '../../../../firebase/FirebaseConfig';
 import { toast } from 'react-toastify';
 import jsPDF from 'jspdf';
@@ -16,6 +16,7 @@ const Invoice = () => {
     const [viewInvoiceId, setViewInvoiceId] = useState(null);
     const [previewInvoice, setPreviewInvoice] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [editingInvoiceId, setEditingInvoiceId] = useState(null);
     const [invoiceForm, setInvoiceForm] = useState({
         invoiceNumber: '',
         customerName: '',
@@ -216,13 +217,26 @@ const Invoice = () => {
         try {
             const invoiceData = {
                 ...invoiceForm,
-                createdAt: Timestamp.now(),
                 updatedAt: Timestamp.now(),
-                createdBy: JSON.parse(localStorage.getItem('user'))?.user?.email || 'admin'
+                updatedBy: JSON.parse(localStorage.getItem('user'))?.user?.email || 'admin'
             };
 
-            await addDoc(collection(fireDB, 'invoices'), invoiceData);
-            toast.success('Invoice created successfully!');
+            if (editingInvoiceId) {
+                // Update existing invoice
+                await updateDoc(doc(fireDB, 'invoices', editingInvoiceId), invoiceData);
+                toast.success('Invoice updated successfully!');
+                setEditingInvoiceId(null);
+            } else {
+                // Create new invoice
+                const newInvoiceData = {
+                    ...invoiceData,
+                    createdAt: Timestamp.now(),
+                    createdBy: JSON.parse(localStorage.getItem('user'))?.user?.email || 'admin'
+                };
+                await addDoc(collection(fireDB, 'invoices'), newInvoiceData);
+                toast.success('Invoice created successfully!');
+            }
+            
             setShowForm(false);
             resetForm();
             fetchInvoices();
@@ -234,8 +248,38 @@ const Invoice = () => {
         }
     };
 
+    // Handle edit invoice
+    const handleEditInvoice = (invoice) => {
+        setEditingInvoiceId(invoice.id);
+        setInvoiceForm({
+            invoiceNumber: invoice.invoiceNumber || '',
+            customerName: invoice.customerName || '',
+            customerEmail: invoice.customerEmail || '',
+            customerPhone: invoice.customerPhone || '',
+            customerAddress: invoice.customerAddress || '',
+            customerCity: invoice.customerCity || '',
+            customerState: invoice.customerState || '',
+            customerPincode: invoice.customerPincode || '',
+            items: invoice.items && invoice.items.length > 0 
+                ? invoice.items.map(item => ({
+                    ...item,
+                    total: item.total || calculateItemTotal(item.quantity || 1, item.price || 0)
+                }))
+                : [{ category: '', name: '', productId: '', quantity: 1, price: 0, total: 0 }],
+            subtotal: invoice.subtotal || 0,
+            tax: invoice.tax || 0,
+            discount: invoice.discount || 0,
+            deliveryCharge: invoice.deliveryCharge || 0,
+            total: invoice.total || 0,
+            notes: invoice.notes || '',
+            date: invoice.date ? (invoice.date.toDate ? invoice.date.toDate().toISOString().split('T')[0] : invoice.date.split('T')[0]) : new Date().toISOString().split('T')[0]
+        });
+        setShowForm(true);
+    };
+
     // Reset form
     const resetForm = () => {
+        setEditingInvoiceId(null);
         setInvoiceForm({
             invoiceNumber: generateInvoiceNumber(),
             customerName: '',
@@ -313,10 +357,11 @@ const Invoice = () => {
             try {
                 // Create a clone of the invoice element for PDF with optimized sizing
                 const clone = invoiceElement.cloneNode(true);
-                clone.style.width = '210mm';
+                clone.style.width = '215.9mm'; // 21.59 cm
+                clone.style.height = '279.4mm'; // 27.94 cm
                 clone.style.padding = '15mm';
                 clone.style.fontSize = '10px';
-                clone.style.transform = 'scale(0.8)';
+                clone.style.transform = 'scale(1)';
                 clone.style.transformOrigin = 'top left';
                 
                 // Temporarily append to body for rendering
@@ -326,8 +371,8 @@ const Invoice = () => {
 
                 const canvas = await html2canvas(clone, { 
                     scale: 1.5,
-                    width: 794, // A4 width in pixels at 96 DPI (210mm)
-                    height: 1123, // A4 height in pixels at 96 DPI (297mm)
+                    width: 816, // 21.59 cm width in pixels at 96 DPI (215.9mm)
+                    height: 1056, // 27.94 cm height in pixels at 96 DPI (279.4mm)
                     useCORS: true,
                     logging: false
                 });
@@ -335,14 +380,18 @@ const Invoice = () => {
                 document.body.removeChild(clone);
 
                 const imgData = canvas.toDataURL('image/png');
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const imgWidth = 210; // A4 width in mm
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: [215.9, 279.4] // Custom size: 21.59 x 27.94 cm
+                });
+                const imgWidth = 215.9; // Width in mm
                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
                 
                 // Fit to one page
-                if (imgHeight > 297) {
+                if (imgHeight > 279.4) {
                     // Scale down to fit
-                    const scale = 297 / imgHeight;
+                    const scale = 279.4 / imgHeight;
                     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth * scale, imgHeight * scale);
                 } else {
                     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
@@ -384,14 +433,16 @@ const Invoice = () => {
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                     <Plus className="w-5 h-5" />
-                    Create Invoice
+                    {editingInvoiceId ? 'Create New Invoice' : 'Create Invoice'}
                 </button>
             </div>
 
-            {/* Create Invoice Form */}
+            {/* Create/Edit Invoice Form */}
             {showForm && (
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border border-gray-200">
-                    <h3 className="text-xl font-bold mb-4 text-gray-800">Create New Invoice</h3>
+                    <h3 className="text-xl font-bold mb-4 text-gray-800">
+                        {editingInvoiceId ? 'Edit Invoice' : 'Create New Invoice'}
+                    </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
@@ -401,8 +452,11 @@ const Invoice = () => {
                                 name="invoiceNumber"
                                 value={invoiceForm.invoiceNumber}
                                 onChange={handleInputChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                readOnly
+                                disabled={editingInvoiceId !== null}
+                                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                    editingInvoiceId ? 'bg-gray-100 cursor-not-allowed' : ''
+                                }`}
+                                title={editingInvoiceId ? 'Invoice number cannot be changed' : ''}
                             />
                         </div>
                         <div>
@@ -680,7 +734,7 @@ const Invoice = () => {
                             className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                         >
                             <Save className="w-5 h-5" />
-                            Save Invoice
+                            {editingInvoiceId ? 'Update Invoice' : 'Save Invoice'}
                         </button>
                         <button
                             onClick={() => {
@@ -755,6 +809,13 @@ const Invoice = () => {
                                                     <Eye className="w-4 h-4" />
                                                 </button>
                                                 <button
+                                                    onClick={() => handleEditInvoice(invoice)}
+                                                    className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg"
+                                                    title="Edit Invoice"
+                                                >
+                                                    <Edit className="w-4 h-4" />
+                                                </button>
+                                                <button
                                                     onClick={() => handlePrintInvoice(invoice)}
                                                     className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
                                                     title="Print Invoice"
@@ -788,7 +849,7 @@ const Invoice = () => {
             {/* Preview Invoice Modal */}
             {previewInvoice && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white rounded-lg w-full max-w-[215.9mm] max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-2xl font-bold text-gray-800">Preview Invoice</h3>
@@ -800,7 +861,7 @@ const Invoice = () => {
                                 </button>
                             </div>
                             
-                            <div id="preview-invoice" style={{ position: 'relative', width: 700, margin: '0 auto', background: '#fff', padding: 32, borderRadius: 16, fontFamily: 'Inter, Arial, sans-serif', boxShadow: '0 4px 24px rgba(60,120,60,0.08)' }}>
+                            <div id="preview-invoice" style={{ position: 'relative', width: '215.9mm', height: '279.4mm', margin: '0 auto', background: '#fff', padding: '15mm', borderRadius: 16, fontFamily: 'Inter, Arial, sans-serif', boxShadow: '0 4px 24px rgba(60,120,60,0.08)', fontSize: '11px' }}>
                                 <div style={{ position: 'relative', zIndex: 1 }}>
                                     {/* Invoice Header */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -962,10 +1023,11 @@ const Invoice = () => {
                                             try {
                                                 // Create a clone of the invoice element for PDF with optimized sizing
                                                 const clone = invoiceElement.cloneNode(true);
-                                                clone.style.width = '210mm';
+                                                clone.style.width = '215.9mm'; // 21.59 cm
+                                                clone.style.height = '279.4mm'; // 27.94 cm
                                                 clone.style.padding = '15mm';
                                                 clone.style.fontSize = '10px';
-                                                clone.style.transform = 'scale(0.8)';
+                                                clone.style.transform = 'scale(1)';
                                                 clone.style.transformOrigin = 'top left';
                                                 
                                                 // Temporarily append to body for rendering
@@ -975,8 +1037,8 @@ const Invoice = () => {
 
                                                 const canvas = await html2canvas(clone, { 
                                                     scale: 1.5,
-                                                    width: 794, // A4 width in pixels at 96 DPI (210mm)
-                                                    height: 1123, // A4 height in pixels at 96 DPI (297mm)
+                                                    width: 816, // 21.59 cm width in pixels at 96 DPI (215.9mm)
+                                                    height: 1056, // 27.94 cm height in pixels at 96 DPI (279.4mm)
                                                     useCORS: true,
                                                     logging: false
                                                 });
@@ -984,14 +1046,18 @@ const Invoice = () => {
                                                 document.body.removeChild(clone);
 
                                                 const imgData = canvas.toDataURL('image/png');
-                                                const pdf = new jsPDF('p', 'mm', 'a4');
-                                                const imgWidth = 210; // A4 width in mm
+                                                const pdf = new jsPDF({
+                                                    orientation: 'portrait',
+                                                    unit: 'mm',
+                                                    format: [215.9, 279.4] // Custom size: 21.59 x 27.94 cm
+                                                });
+                                                const imgWidth = 215.9; // Width in mm
                                                 const imgHeight = (canvas.height * imgWidth) / canvas.width;
                                                 
                                                 // Fit to one page
-                                                if (imgHeight > 297) {
+                                                if (imgHeight > 279.4) {
                                                     // Scale down to fit
-                                                    const scale = 297 / imgHeight;
+                                                    const scale = 279.4 / imgHeight;
                                                     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth * scale, imgHeight * scale);
                                                 } else {
                                                     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
@@ -1019,7 +1085,7 @@ const Invoice = () => {
                                     className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                                 >
                                     <Save className="w-5 h-5" />
-                                    Save Invoice
+                                    {editingInvoiceId ? 'Update Invoice' : 'Save Invoice'}
                                 </button>
                                 <button
                                     onClick={() => setPreviewInvoice(false)}
@@ -1036,7 +1102,7 @@ const Invoice = () => {
             {/* Invoice View Modal */}
             {viewInvoiceId && selectedInvoice && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white rounded-lg w-full max-w-[215.9mm] max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-2xl font-bold text-gray-800">Invoice</h3>
@@ -1048,7 +1114,7 @@ const Invoice = () => {
                                 </button>
                             </div>
                             
-                            <div id={`invoice-${selectedInvoice.id}`} style={{ position: 'relative', width: '210mm', maxWidth: '100%', margin: '0 auto', background: '#fff', padding: '15mm', borderRadius: 16, fontFamily: 'Inter, Arial, sans-serif', boxShadow: '0 4px 24px rgba(60,120,60,0.08)', fontSize: '11px' }}>
+                            <div id={`invoice-${selectedInvoice.id}`} style={{ position: 'relative', width: '215.9mm', height: '279.4mm', maxWidth: '100%', margin: '0 auto', background: '#fff', padding: '15mm', borderRadius: 16, fontFamily: 'Inter, Arial, sans-serif', boxShadow: '0 4px 24px rgba(60,120,60,0.08)', fontSize: '11px' }}>
                                 <div style={{ position: 'relative', zIndex: 1 }}>
                                     {/* Invoice Header */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
